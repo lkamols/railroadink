@@ -1,5 +1,5 @@
 from enum import Enum
-
+from dataclasses import dataclass
 from PIL import Image
 
 NUM_ROWS = 7
@@ -10,8 +10,6 @@ TOP_OFFSET = 44
 LEFT_OFFSET = 30
 BOARD_WIDTH = 669
 BOARD_HEIGHT = 669
-
-
 
 PHOTOS_FOLDER = "Railroad-Pictures/"
 
@@ -55,6 +53,28 @@ class Side(Enum):
     RIGHT = 1
     BOTTOM = 2
     LEFT = 3
+    
+    @staticmethod
+    def opposite(side):
+        if side == Side.TOP:
+            return Side.BOTTOM
+        elif side == Side.BOTTOM:
+            return Side.TOP
+        elif side == Side.RIGHT:
+            return Side.LEFT
+        else:
+            return Side.RIGHT
+
+"""
+basically just a struct object for storing one edge of a cluster
+"""
+@dataclass 
+class ClusterEdge:
+    row: int
+    col: int
+    side: Side
+    edge: Edge
+    
     
 #start locations of all the highways and railways
 highway_start_positions = [(-1, 1, Orientation.TURN_180), (-1, 5, Orientation.TURN_180),
@@ -235,8 +255,99 @@ class Cluster:
         self.row = row
         self.col = col
         self.blank_cluster = (tile == None) #whether this cluster is a blank cluster or a tiled cluster
+        self.cluster_tiles = [(row, col, tile)]
         
-    #def join
+        #add all the edges of the cluster
+        self.frontier = []
+        if not self.blank_cluster:
+            for side in Side:
+                edge = tile.get_edge_type_on_side(side)
+                if edge != Edge.B:
+                    self.frontier += [ClusterEdge(row, col, side, edge)]
+
+    """
+    find the representative element of the disjoint set containing this tile cluster
+    applies the path compression heuristic
+    """     
+    def find_set(self):
+        if self.parent != None:
+            self.parent = self.find_set(self.parent)
+        return self.parent
+    
+    """
+    find an element of the frontier corresponding to the given row, column and side
+    """
+    def find_in_frontier(self, row, col, side):
+        for ce in self.frontier:
+            if ce.row == row and ce.col == col and ce.side == side:
+                return ce
+        raise ValueError("{0}, {1}, {2} not found in frontier".format(row, col, side.name))
+        
+    """
+    remove an element from the frontier
+    """
+    def remove_from_frontier(self, ce):
+        self.frontier.remove(ce)
+            
+        
+    """
+    join the clusters that tile1 and tile2 are in (not necessarily representative elements)
+    side - the side of tile1 that tile2 is supposed to be on, this function assumes that the given tiles are adjacent
+    returns False if the two entered broke the game rules
+    """
+    @staticmethod
+    def try_join_clusters(tile1, tile2, side):
+        #get the representative element of each of the tiles
+        representative1 = tile1.find_set()
+        representative2 = tile2.find_set()
+        #now find the element of the frontier of each of them
+        frontierEdge1 = representative1.find_in_frontier(tile1.row, tile1.col, side)
+        frontierEdge2 = representative2.find_in_frontier(tile2.row, tile2.col, Side.opposite(side))
+        
+        #get the edge types out because they will be used a lot and are long
+        edge1 = frontierEdge1.edge
+        edge2 = frontierEdge2.edge
+        
+        #the only invalid combination of the two is if one is a highway and the other is a railway
+        if (edge1 == Edge.H and edge2 == Edge.R) or (edge1 == Edge.R and edge2 == Edge.H):
+            raise ValueError("board invalid - clash between ({0},{1}) and ({2},{3})".format(
+                    tile1.row, tile1.col, tile2.row, tile2.col))
+            
+        #if one of them is blank, then we will not join them, but will add to the frontier of the blank one
+        #if a blank cluster has no frontier, it is completely ruled out of the game
+        elif edge1 == Edge.B and edge2 != Edge.B:
+            representative1.frontier += [frontierEdge2]
+            return
+        elif edge1 != Edge.B and edge2 == Edge.B:
+            representative2.frontier += [frontierEdge1]
+            return
+        
+        #if they are the same we will be joining the clusters together, remove the edges that joined them together
+        if (edge1 == Edge.H and edge2 == Edge.H) or (edge1 == Edge.R and edge2 == Edge.R):
+            representative1.remove_from_frontier(frontierEdge1)
+            representative2.remove_from_frontier(frontierEdge2)
+            
+        #we only get this far if we ARE joining the two clusters together, so join the two clusters together
+        #do this with the union by rank heuristic to ensure the clusters keep depth low
+        if representative1.rank > representative2.rank:
+            representative2.parent = representative1 #point cluster 2 to cluster 1
+            #merge the frontier and cluster tiles list together so that rep 1 has all the joined information
+            representative1.frontier += representative2.frontier
+            representative1.cluster_tiles += representative2.cluster_tiles
+        else:
+            representative1.parent = representative2
+            representative2.frontier += representative1.frontier
+            representative2.cluster_tiles += representative1.cluster_tiles
+            #increase the rank if they were the same
+            if representative1.rank == representative2.rank:
+                representative2.rank += 1
+            
+        
+        
+        
+
+        
+        
             
        
 
@@ -245,4 +356,5 @@ if __name__ == "__main__":
     board = Board()
     board.add_tile(2,3, Piece.RAILWAY_CORNER, Orientation.DEFAULT)
     board.fancy_board_print()
-
+    
+    print(Side.opposite(Side.TOP))
