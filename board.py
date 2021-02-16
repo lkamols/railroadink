@@ -40,6 +40,8 @@ class Piece(Enum):
     #start pieces (the edge tiles)
     START_RAILWAY = 15
     START_HIGHWAY = 16
+    #the magical blank tile
+    BLANK = 17
     
 class Orientation(Enum):
     DEFAULT = 0
@@ -87,27 +89,28 @@ railway_start_positions = [(-1, 3, Orientation.TURN_180), (NUM_ROWS, 3, Orientat
 class Tile:
     
     #map of all the tiles in their default orientation
-    tile_map = {
-        Piece.RAILWAY_CORNER: (Edge.R, Edge.B, Edge.B, Edge.R, False),
-        Piece.RAILWAY_T: (Edge.R, Edge.R, Edge.B, Edge.R, False),
-        Piece.RAILWAY_STRAIGHT: (Edge.R, Edge.B, Edge.R, Edge.B, False),
-        Piece.HIGHWAY_CORNER: (Edge.H, Edge.B, Edge.B, Edge.H, False),
-        Piece.HIGHWAY_T: (Edge.H, Edge.H, Edge.B, Edge.H, False),
-        Piece.HIGHWAY_STRAIGHT: (Edge.H, Edge.B, Edge.H, Edge.B, False),
-        Piece.OVERPASS: (Edge.H, Edge.R, Edge.H, Edge.R, True),
-        Piece.STRAIGHT_STATION: (Edge.R, Edge.B, Edge.H, Edge.B, False),
-        Piece.CORNER_STATION: (Edge.R, Edge.B, Edge.B, Edge.H, False),
-        Piece.THREE_H_JUNCTION: (Edge.H, Edge.H, Edge.R, Edge.H, False),
-        Piece.THREE_R_JUNCTION: (Edge.H, Edge.R, Edge.R, Edge.R, False),
-        Piece.HIGHWAY_JUNCTION: (Edge.H, Edge.H, Edge.H, Edge.H, False),
-        Piece.RAILWAY_JUNCTION: (Edge.R, Edge.R, Edge.R, Edge.R, False),
-        Piece.CORNER_JUNCTION: (Edge.H, Edge.R, Edge.R, Edge.H, False),
-        Piece.CROSS_JUNCTION: (Edge.H, Edge.R, Edge.H, Edge.R, False),  
-        Piece.START_RAILWAY: (Edge.R, Edge.B, Edge.B, Edge.B, False),
-        Piece.START_HIGHWAY: (Edge.H, Edge.B, Edge.B, Edge.B, False)
+    _tile_map = {
+        Piece.RAILWAY_CORNER: (Edge.R, Edge.B, Edge.B, Edge.R),
+        Piece.RAILWAY_T: (Edge.R, Edge.R, Edge.B, Edge.R),
+        Piece.RAILWAY_STRAIGHT: (Edge.R, Edge.B, Edge.R, Edge.B),
+        Piece.HIGHWAY_CORNER: (Edge.H, Edge.B, Edge.B, Edge.H),
+        Piece.HIGHWAY_T: (Edge.H, Edge.H, Edge.B, Edge.H),
+        Piece.HIGHWAY_STRAIGHT: (Edge.H, Edge.B, Edge.H, Edge.B),
+        Piece.OVERPASS: (Edge.H, Edge.R, Edge.H, Edge.R),
+        Piece.STRAIGHT_STATION: (Edge.R, Edge.B, Edge.H, Edge.B),
+        Piece.CORNER_STATION: (Edge.R, Edge.B, Edge.B, Edge.H),
+        Piece.THREE_H_JUNCTION: (Edge.H, Edge.H, Edge.R, Edge.H),
+        Piece.THREE_R_JUNCTION: (Edge.H, Edge.R, Edge.R, Edge.R),
+        Piece.HIGHWAY_JUNCTION: (Edge.H, Edge.H, Edge.H, Edge.H),
+        Piece.RAILWAY_JUNCTION: (Edge.R, Edge.R, Edge.R, Edge.R),
+        Piece.CORNER_JUNCTION: (Edge.H, Edge.R, Edge.R, Edge.H),
+        Piece.CROSS_JUNCTION: (Edge.H, Edge.R, Edge.H, Edge.R),  
+        Piece.START_RAILWAY: (Edge.R, Edge.B, Edge.B, Edge.B),
+        Piece.START_HIGHWAY: (Edge.H, Edge.B, Edge.B, Edge.B),
+        Piece.BLANK: (Edge.B, Edge.B, Edge.B, Edge.B)
         }
     
-    tile_pics = {
+    _tile_pics = {
         Piece.RAILWAY_CORNER: "railway-corner.png",
         Piece.RAILWAY_T: "railway-t.png",
         Piece.RAILWAY_STRAIGHT: "railway-straight.png",
@@ -129,19 +132,18 @@ class Tile:
     Constructor
     """
     def __init__(self, piece, orientation):
-        self.piece = piece
-        self.orientation = orientation
+        self._piece = piece
+        self._orientation = orientation
         #load in all the left, right, down, up and overpass values
         #load these upon creation because they will be accessed multiple times
         self._dirs = {}
-        self._dirs[Side.TOP], self._dirs[Side.RIGHT], self._dirs[Side.BOTTOM], \
-                self._dirs[Side.LEFT], self.overpass = self.tile_map[piece]
-        self.rotate(orientation)
+        self._dirs[Side.TOP], self._dirs[Side.RIGHT], self._dirs[Side.BOTTOM], self._dirs[Side.LEFT] = self._tile_map[piece]
+        self._rotate(orientation)
         
     """
     rotate the tile to the given orientation, assumes in default orientation
     """
-    def rotate(self, orientation):
+    def _rotate(self, orientation):
         #rotate to the given orientation, enum values are the number of rotations required
         for rotations in range(orientation.value):
             #change all the assignments in the same line, handles the required temporary variables
@@ -153,15 +155,15 @@ class Tile:
     """
     def get_image(self):
         #get the correct image
-        piece_image = Image.open(PHOTOS_FOLDER + self.tile_pics[self.piece])
+        piece_image = Image.open(PHOTOS_FOLDER + self._tile_pics[self._piece])
         #resize the image
         piece_image = piece_image.resize([BOARD_WIDTH//NUM_COLS, BOARD_HEIGHT//NUM_ROWS], Image.ANTIALIAS)
         #rotate the image
-        if self.orientation == Orientation.TURN_90:
+        if self._orientation == Orientation.TURN_90:
             piece_image.rotate(90)
-        elif self.orientation == Orientation.TURN_180:
+        elif self._orientation == Orientation.TURN_180:
             piece_image.rotate(180)
-        elif self.orientation == Orientation.TURN_270:
+        elif self._orientation == Orientation.TURN_270:
             piece_image.rotate(270)
         return piece_image
     
@@ -170,6 +172,15 @@ class Tile:
     """
     def get_edge_type_on_side(self, side):
         return self._dirs[side]
+    
+    def get_piece(self):
+        return self._piece
+    
+    def get_orientation(self):
+        return self._orientation
+    
+    def get_overpass(self):
+        return self._piece == Piece.OVERPASS
     
     """
     override the equality function to treat two Tiles with the same value the same
@@ -192,30 +203,30 @@ class Board:
     
     def __init__(self):
         #create an empty board with no tiles in it yet
-        self.board = [[None]*NUM_COLS for i in range(NUM_ROWS)]
-        self.initialise_start_tiles()
+        self._board = [[Tile(Piece.BLANK, Orientation.DEFAULT)]*NUM_COLS for i in range(NUM_ROWS)]
+        self._initialise_start_tiles()
       
     """
     add a tile to the board
     """
     def add_tile(self, row, col, piece, orientation):
-        self.board[row][col] = Tile(piece, orientation)
+        self._board[row][col] = Tile(piece, orientation)
         
     """
     add a start tile to the board, these are the pieces around the edge
     """
-    def add_start_tile(self, row, col, piece, orientation):
+    def _add_start_tile(self, row, col, piece, orientation):
         self.start_pieces += [(row, col, Tile(piece, orientation))]
         
     """
     initialise all the start pieces
     """
-    def initialise_start_tiles(self):
+    def _initialise_start_tiles(self):
         self.start_pieces = []
         for row, col, orientation in railway_start_positions:
-            self.add_start_tile(row, col, Piece.START_RAILWAY, orientation)
+            self._add_start_tile(row, col, Piece.START_RAILWAY, orientation)
         for row, col, orientation in highway_start_positions:
-            self.add_start_tile(row, col, Piece.START_HIGHWAY, orientation)
+            self._add_start_tile(row, col, Piece.START_HIGHWAY, orientation)
         
     """
     creates an image corresponding to the board,
@@ -228,8 +239,8 @@ class Board:
         im.paste(board, (0,0))
         for row in range(NUM_ROWS):
             for col in range(NUM_COLS):
-                if self.board[row][col] != None:
-                    piece_image = self.board[row][col].get_image()
+                if self._board[row][col].get_piece() != Piece.BLANK:
+                    piece_image = self._board[row][col].get_image()
                     im.paste(piece_image, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
         
         #now display the image, depending on if a file is given
@@ -237,6 +248,10 @@ class Board:
             im.show()
         else:
             im.save(file)
+            
+    #def find_clusters(self):
+        #first create clusters for all of the start tiles and all the tiles on the board
+        
 
    
 """
@@ -342,14 +357,6 @@ class Cluster:
             if representative1.rank == representative2.rank:
                 representative2.rank += 1
             
-        
-        
-        
-
-        
-        
-            
-       
 
 if __name__ == "__main__":
 
