@@ -1,6 +1,7 @@
 from enum import Enum
 from dataclasses import dataclass
 from PIL import Image
+from time import sleep
 
 NUM_ROWS = 7
 NUM_COLS = 7
@@ -295,9 +296,10 @@ class Board:
                     Cluster.try_join_clusters(start_cluster, other_cluster, Side.LEFT)
                     
         #next process all the other clusters, only reach up and left, since each pair only needs to be done once
-        """
+        
         for row in range(NUM_ROWS):
             for col in range(NUM_COLS):
+                print(row, col)
                 #try and join with the cluster above - unless we are in the top row
                 if row != 0:
                     #need to go through this list, there is almost certainly only one element - unless it's an overpass
@@ -309,7 +311,7 @@ class Board:
                     for cluster in clusters[row][col]:
                         for cluster_left in clusters[row][col - 1]:
                             Cluster.try_join_clusters(cluster, cluster_left, Side.LEFT)
-        """                                            
+                                                   
         
         #find all the representative elements of the clusters, these have parents that are None       
         final_clusters = []
@@ -397,7 +399,8 @@ class Cluster:
             representative2.cluster_tiles += representative1.cluster_tiles
             #increase the rank if they were the same
             if representative1.rank == representative2.rank:
-                representative2.rank += 1        
+                representative2.rank += 1 
+
         
     """
     join the clusters that tile1 and tile2 are in (not necessarily representative elements)
@@ -410,6 +413,9 @@ class Cluster:
         #get the representative element of each of the tiles
         representative1 = tile1.find_set()
         representative2 = tile2.find_set()
+        #if they are already in the same cluster, don't join them again
+        if representative1 == representative2:
+            return
         
         #get the edge types out because they will be used a lot and are long
         edge1 = tile1.tile.get_edge_type_on_side(side)
@@ -425,31 +431,35 @@ class Cluster:
         
         #consider the cases with two blank clusters, they will get joined together
         if representative1.blank_cluster and representative2.blank_cluster:
+            print("A")
             #if both clusters are blank clusters, join them together
             Cluster._join_clusters(representative1, representative2)
         #check for if there is one blank cluster and the other isn't
         elif representative1.blank_cluster and not representative2.blank_cluster:
+            print("B")
             #if there is an edge leading into the blank cluster though, add it
             #this allows us to detect detached squares
             if edge2 != Edge.B:
                 representative1.frontier += [frontierEdge2]
         elif representative2.blank_cluster and not representative1.blank_cluster:
+            print("C")
             if edge1 != Edge.B:
                 representative2.frontier += [frontierEdge1]
         #at this point in the chain, they are both not blank clusters
         #if they are the same we will be joining the clusters together, remove the edges that joined them together
         elif (edge1 == Edge.H and edge2 == Edge.H) or (edge1 == Edge.R and edge2 == Edge.R):
+            print("D")
             representative1.remove_from_frontier(frontierEdge1)
             representative2.remove_from_frontier(frontierEdge2)
             Cluster._join_clusters(representative1, representative2)
         #if they have clashes, then this is a problem and raise an error to say that this board is invalid
         elif (edge1 == Edge.H and edge2 == Edge.R) or (edge1 == Edge.R and edge2 == Edge.H):
+            print("E")
             raise ValueError("board invalid - clash between ({0},{1}) and ({2},{3})".format(
                     tile1.row, tile1.col, tile2.row, tile2.col))
         #otherwise we have at least one blank joining non blank clusters, keep them detached
             
         #otherwise there were two tiled clusters, without a valid join between them, in this case leave them separate
-        print("Done")
     
     def get_row(self):
         return self.row
