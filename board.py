@@ -51,6 +51,8 @@ SPECIAL_PIECES = [Piece.THREE_H_JUNCTION, Piece.THREE_R_JUNCTION, Piece.HIGHWAY_
                   Piece.RAILWAY_JUNCTION, Piece.CORNER_JUNCTION, Piece.CROSS_JUNCTION]
 
 OVERPASS_SEGMENTS = [Piece.OVERPASS_RAILWAY, Piece.OVERPASS_HIGHWAY]
+
+START_PIECES = [Piece.START_RAILWAY, Piece.START_HIGHWAY]
     
 class Orientation(Enum):
     DEFAULT = 0
@@ -296,32 +298,25 @@ class Board:
                     row_clusters += [[Cluster(row, col, tile)]] #this is a list of clusters to handle overpasses
             clusters += [row_clusters]
         return clusters
-            
-    def find_clusters(self):
-        #first create clusters for all of the start tiles and all the tiles on the board
-        start_clusters = []
-        for row, col, tile in self._start_tiles:
-            start_clusters += [Cluster(row, col, tile)]
-        #then create clusters for all of the actual tiles
-        clusters = self.initialise_clusters()
-        
+    
+    def process_start_clusters(self, start_clusters, other_clusters):
         #first process all the start clusters
         for start_cluster in start_clusters:
             if start_cluster.row == -1: #these are the top clusters
-                for other_cluster in clusters[start_cluster.get_row() + 1][start_cluster.get_col()]:
+                for other_cluster in other_clusters[start_cluster.get_row() + 1][start_cluster.get_col()]:
                     Cluster.try_join_clusters(start_cluster, other_cluster, Side.BOTTOM)
             elif start_cluster.row == NUM_ROWS: #these are the ones on the bottom
-                for other_cluster in clusters[start_cluster.get_row() - 1][start_cluster.get_col()]:
+                for other_cluster in other_clusters[start_cluster.get_row() - 1][start_cluster.get_col()]:
                     Cluster.try_join_clusters(start_cluster, other_cluster, Side.TOP)
             elif start_cluster.col == -1: #the ones on the left
-                for other_cluster in clusters[start_cluster.get_row()][start_cluster.get_col() + 1]:
+                for other_cluster in other_clusters[start_cluster.get_row()][start_cluster.get_col() + 1]:
                     Cluster.try_join_clusters(start_cluster, other_cluster, Side.RIGHT)
             elif start_cluster.col == NUM_COLS: #on the right
-                for other_cluster in clusters[start_cluster.get_row()][start_cluster.get_col() - 1]:
+                for other_cluster in other_clusters[start_cluster.get_row()][start_cluster.get_col() - 1]:
                     Cluster.try_join_clusters(start_cluster, other_cluster, Side.LEFT)
                     
-        #next process all the other clusters, only reach up and left, since each pair only needs to be done once
-        
+    def process_other_clusters(self, clusters):
+        #only reach up and left, this means that every bridge will be processed once
         for row in range(NUM_ROWS):
             for col in range(NUM_COLS):
                 #try and join with the cluster above - unless we are in the top row
@@ -335,21 +330,21 @@ class Board:
                     for cluster in clusters[row][col]:
                         for cluster_left in clusters[row][col - 1]:
                             Cluster.try_join_clusters(cluster, cluster_left, Side.LEFT)
-                                                   
-        
-        #find all the representative elements of the clusters, these have parents that are None       
-        final_clusters = []
+                            
+    def get_cluster_representatives(self, start_clusters, clusters):
+        cluster_reps = []
         for cluster in start_clusters:
             if cluster.is_representative():
-                final_clusters += [cluster]
+                cluster_reps += [cluster]
         for row in range(NUM_ROWS):
             for col in range(NUM_COLS):
                 for cluster in clusters[row][col]:
                     if cluster.is_representative():
-                        final_clusters += [cluster]
-                        
-        #do a little check to ensure there aren't any non-blank clusters that aren't attached to an edge
-        for cluster in final_clusters:
+                        cluster_reps += [cluster]
+        return cluster_reps
+    
+    def check_for_illegal_clusters(self, cluster_reps):
+        for cluster in cluster_reps:
             if not cluster.is_blank_cluster():
                 #check that there is at least one start piece in each cluster
                 for row, col, tile in cluster.get_cluster_tiles():
@@ -357,9 +352,34 @@ class Board:
                         break
                 else:
                     raise ValueError("Cluster has no start element -", cluster.get_cluster_tiles())
-        return final_clusters
-                                             
-                
+        
+             
+    def find_clusters(self):
+        #first create clusters for all of the start tiles and all the tiles on the board
+        start_clusters = []
+        for row, col, tile in self._start_tiles:
+            start_clusters += [Cluster(row, col, tile)]
+        #then create clusters for all of the actual tiles
+        clusters = self.initialise_clusters()
+        
+        self.process_start_clusters(start_clusters, clusters)
+                    
+        self.process_other_clusters(clusters)
+        #next process all the other clusters, only reach up and left, since each pair only needs to be done once
+
+        #find all the representative elements of the clusters, these have parents that have themselves as parents
+        cluster_reps = self.get_cluster_representatives(start_clusters, clusters)
+        
+                        
+        #do a little check to ensure there aren't any non-blank clusters that aren't attached to an edge
+        self.check_for_illegal_clusters(cluster_reps)
+        return cluster_reps
+
+     
+    #GETTER METHODS
+                                        
+    def get_used_special_routes(self):
+        return self._special_routes
         
         
 
@@ -381,6 +401,12 @@ class Cluster:
         self.col = col
         self.blank_cluster = (tile.get_piece() == Piece.BLANK) #whether this cluster is a blank cluster or a tiled cluster
         self.cluster_tiles = [(row, col, tile)]
+        
+        #initialise the count of start pieces
+        if tile.get_piece() in START_PIECES:
+            self.start_count = 1
+        else:
+            self.start_count = 0
         
         #add all the edges of the cluster
         self.frontier = []
@@ -426,10 +452,12 @@ class Cluster:
             #merge the frontier and cluster tiles list together so that rep 1 has all the joined information
             representative1.frontier += representative2.frontier
             representative1.cluster_tiles += representative2.cluster_tiles
+            representative1.start_count += representative2.start_count
         else:
             representative1.parent = representative2
             representative2.frontier += representative1.frontier
             representative2.cluster_tiles += representative1.cluster_tiles
+            representative2.start_count += representative1.start_count
             #increase the rank if they were the same
             if representative1.rank == representative2.rank:
                 representative2.rank += 1 
@@ -501,6 +529,8 @@ class Cluster:
         elif edge2 == Edge.B and not isOverpass2 and edge1 != Edge.B:
             representative1.remove_from_frontier(frontierEdge1)
             
+            
+    #GETTER METHODS
     
     def get_row(self):
         return self.row
@@ -520,9 +550,16 @@ class Cluster:
     def get_cluster_tiles(self):
         return self.cluster_tiles
         
+    def get_frontier(self):
+        return self.frontier
+    
+    def get_start_count(self):
+        return self.start_count
         
 
-
+"""
+create the board for the game shown in the rulebook
+"""
 def rulebook_game():
     board = Board()
     board.add_tile(0, 1, Piece.HIGHWAY_STRAIGHT, Orientation.DEFAULT)
@@ -559,4 +596,7 @@ if __name__ == "__main__":
     board.fancy_board_print()
     clusters = board.find_clusters()
     for cluster in clusters:
+        print(cluster.get_start_count())
         print(cluster.get_cluster_tiles())
+        print(cluster.get_frontier())
+    print(board.get_used_special_routes())
