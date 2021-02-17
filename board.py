@@ -1,7 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from PIL import Image, ImageOps
-from time import sleep
+from PIL import Image
 
 NUM_ROWS = 7
 NUM_COLS = 7
@@ -14,11 +13,17 @@ BOARD_HEIGHT = 669
 
 PHOTOS_FOLDER = "Railroad-Pictures/"
 
+"""
+Enum for the types of edges that can be on a piece
+"""
 class Edge(Enum):
     R = 0 #railway
     H = 1 #highway
     B = 2 #blank
-    
+   
+"""
+All the different possible pieces
+"""
 class Piece(Enum):
     #basic pieces
     RAILWAY_CORNER = 0
@@ -47,26 +52,37 @@ class Piece(Enum):
     OVERPASS_RAILWAY = 18
     OVERPASS_HIGHWAY = 19
     
+#grouping of pieces
+BASIC_PIECES = [Piece.RAILWAY_CORNER, Piece.RAILWAY_T, Piece.RAILWAY_STRAIGHT,
+                Piece.HIGHWAY_CORNER, Piece.HIGHWAY_T, Piece.HIGHWAY_STRAIGHT]
+JUNCTION_PIECES = [Piece.OVERPASS, Piece.STRAIGHT_STATION, Piece.CORNER_STATION]
 SPECIAL_PIECES = [Piece.THREE_H_JUNCTION, Piece.THREE_R_JUNCTION, Piece.HIGHWAY_JUNCTION,
                   Piece.RAILWAY_JUNCTION, Piece.CORNER_JUNCTION, Piece.CROSS_JUNCTION]
-
+START_PIECES = [Piece.START_RAILWAY, Piece.START_HIGHWAY]
 OVERPASS_SEGMENTS = [Piece.OVERPASS_RAILWAY, Piece.OVERPASS_HIGHWAY]
 
-START_PIECES = [Piece.START_RAILWAY, Piece.START_HIGHWAY]
-    
-class Orientation(Enum):
-    DEFAULT = 0
+"""
+The different possible Rotations of a piece
+"""
+class Rotation(Enum):
+    I = 0 #identity
     #turns considered clockwise
-    TURN_90 = 1
-    TURN_180 = 2
-    TURN_270 = 3
-    
+    R90 = 1
+    R180 = 2
+    R270 = 3
+   
+"""
+The sides of a piece
+"""
 class Side(Enum):
     TOP = 0
     RIGHT = 1
     BOTTOM = 2
     LEFT = 3
     
+    """
+    get the side opposite of the provided side
+    """
     @staticmethod
     def opposite(side):
         if side == Side.TOP:
@@ -90,16 +106,19 @@ class ClusterEdge:
     
     
 #start locations of all the highways and railways
-highway_start_positions = [(-1, 1, Orientation.TURN_180), (-1, 5, Orientation.TURN_180),
-                           (3, -1, Orientation.TURN_90), (3, NUM_COLS, Orientation.TURN_270),
-                           (NUM_ROWS, 1, Orientation.DEFAULT), (NUM_ROWS, 5, Orientation.DEFAULT)]
-railway_start_positions = [(-1, 3, Orientation.TURN_180), (NUM_ROWS, 3, Orientation.DEFAULT),
-                           (1, -1, Orientation.TURN_90), (5, -1, Orientation.TURN_90),
-                           (1, NUM_COLS, Orientation.TURN_270), (5, NUM_COLS, Orientation.TURN_270)]
+HIGHWAY_START_POSITIONS = [(-1, 1, Rotation.R180), (-1, 5, Rotation.R180),
+                           (3, -1, Rotation.R90), (3, NUM_COLS, Rotation.R270),
+                           (NUM_ROWS, 1, Rotation.I), (NUM_ROWS, 5, Rotation.I)]
+RAILWAY_START_POSITIONS = [(-1, 3, Rotation.R180), (NUM_ROWS, 3, Rotation.I),
+                           (1, -1, Rotation.R90), (5, -1, Rotation.R90),
+                           (1, NUM_COLS, Rotation.R270), (5, NUM_COLS, Rotation.R270)]
 
+"""
+Class for one tile, does not contain its positional information
+"""
 class Tile:
     
-    #map of all the tiles in their default orientation
+    #map of all the tiles in their default rotation
     _tile_map = {
         Piece.RAILWAY_CORNER: (Edge.R, Edge.B, Edge.B, Edge.R),
         Piece.RAILWAY_T: (Edge.R, Edge.R, Edge.B, Edge.R),
@@ -143,11 +162,11 @@ class Tile:
     }
     
     """
-    Constructor
+    Constructor, given a piece and a rotation
     """
-    def __init__(self, piece, orientation, flip=False):
+    def __init__(self, piece, rotation, flip=False):
         self._piece = piece
-        self._orientation = orientation
+        self._rotation = rotation
         self._flip = flip
         #load in all the left, right, down, up and overpass values
         #load these upon creation because they will be accessed multiple times
@@ -156,14 +175,14 @@ class Tile:
         #flips occur before rotations
         if flip:
             self._reverse()
-        self._rotate(orientation)
+        self._rotate(rotation)
         
     """
-    rotate the tile to the given orientation, assumes in default orientation
+    rotate the tile by the given transformation
     """
-    def _rotate(self, orientation):
-        #rotate to the given orientation, enum values are the number of rotations required
-        for rotations in range(orientation.value):
+    def _rotate(self, rotation):
+        #rotate by the given transfrom, enum values are the number of rotations required
+        for rotations in range(rotation.value):
             #change all the assignments in the same line, handles the required temporary variables
             self._dirs[Side.TOP], self._dirs[Side.RIGHT], self._dirs[Side.BOTTOM], self._dirs[Side.LEFT] = \
                     self._dirs[Side.LEFT], self._dirs[Side.TOP], self._dirs[Side.RIGHT], self._dirs[Side.BOTTOM]
@@ -177,7 +196,7 @@ class Tile:
                 self._dirs[Side.LEFT], self._dirs[Side.BOTTOM], self._dirs[Side.RIGHT], self._dirs[Side.TOP]
          
     """
-    get the image associated with this piece and orientation, scaled to fit on the board image
+    get the image associated with this piece and rotation, scaled to fit on the board image
     """
     def get_image(self):
         #get the correct image
@@ -189,11 +208,11 @@ class Tile:
         piece_image = piece_image.resize([BOARD_WIDTH//NUM_COLS, BOARD_HEIGHT//NUM_ROWS], Image.ANTIALIAS)
         #rotate the image, note that this library does counter clockwise rotations, and we encode in clockwise
         #so the rotation amounts are inverses
-        if self._orientation == Orientation.TURN_90:
+        if self._rotation == Rotation.R90:
             piece_image = piece_image.rotate(270)
-        elif self._orientation == Orientation.TURN_180:
+        elif self._rotation == Rotation.R180:
             piece_image = piece_image.rotate(180)
-        elif self._orientation == Orientation.TURN_270:
+        elif self._rotation == Rotation.R270:
             piece_image = piece_image.rotate(90)
         return piece_image
     
@@ -203,11 +222,13 @@ class Tile:
     def get_edge_type_on_side(self, side):
         return self._dirs[side]
     
+    #GETTERS
+    
     def get_piece(self):
         return self._piece
     
-    def get_orientation(self):
-        return self._orientation
+    def get_rotation(self):
+        return self._rotation
     
     def get_overpass(self):
         return self._piece == Piece.OVERPASS
@@ -219,47 +240,54 @@ class Tile:
         if not isinstance(obj, Tile):
             return False
         else:
-            return (self.piece == obj.piece and self.orientation == obj.orientation)
+            return (self.piece == obj.piece and self._rotation == obj._rotation and self._flip == obj._flip)
     
     """
     override the representation function so printing is readable
     """
     def __repr__(self):
-        return "({0},{1},{2},{3},{4},{5})".format(self._piece.name, self._orientation.name, 
+        return "({0},{1},{2},{3},{4},{5})".format(self._piece.name, self._rotation.name, 
                self._dirs[Side.TOP].name, self._dirs[Side.RIGHT].name, self._dirs[Side.BOTTOM].name,
                self._dirs[Side.LEFT].name)
-    
+ 
+"""
+A class for all the information about a given state of play
+"""
 class Board:
     
+    """
+    Constructor.
+    Creates an empty board with no tiles in it
+    """
     def __init__(self):
         #create an empty board with no tiles in it yet
-        self._board = [[Tile(Piece.BLANK, Orientation.DEFAULT)]*NUM_COLS for i in range(NUM_ROWS)]
+        self._board = [[Tile(Piece.BLANK, Rotation.I)]*NUM_COLS for i in range(NUM_ROWS)]
         self._initialise_start_tiles()
         self._special_routes = [] #the special routes that have been used
       
     """
     add a tile to the board
     """
-    def add_tile(self, row, col, piece, orientation, flip=False):
-        self._board[row][col] = Tile(piece, orientation, flip)
+    def add_tile(self, row, col, piece, rotation, flip=False):
+        self._board[row][col] = Tile(piece, rotation, flip)
         if piece in SPECIAL_PIECES:
             self._special_routes += [piece]
         
     """
     add a start tile to the board, these are the pieces around the edge
     """
-    def _add_start_tile(self, row, col, piece, orientation):
-        self._start_tiles += [(row, col, Tile(piece, orientation))]
+    def _add_start_tile(self, row, col, piece, rotation):
+        self._start_tiles += [(row, col, Tile(piece, rotation))]
         
     """
     initialise all the start pieces
     """
     def _initialise_start_tiles(self):
         self._start_tiles = []
-        for row, col, orientation in railway_start_positions:
-            self._add_start_tile(row, col, Piece.START_RAILWAY, orientation)
-        for row, col, orientation in highway_start_positions:
-            self._add_start_tile(row, col, Piece.START_HIGHWAY, orientation)
+        for row, col, rotation in RAILWAY_START_POSITIONS:
+            self._add_start_tile(row, col, Piece.START_RAILWAY, rotation)
+        for row, col, rotation in HIGHWAY_START_POSITIONS:
+            self._add_start_tile(row, col, Piece.START_HIGHWAY, rotation)
         
     """
     creates an image corresponding to the board,
@@ -270,6 +298,7 @@ class Board:
         board = Image.open(PHOTOS_FOLDER + "board.png")
         im = Image.new('RGB', board.size)
         im.paste(board, (0,0))
+        #then go through each of the tiles and add them
         for row in range(NUM_ROWS):
             for col in range(NUM_COLS):
                 if self._board[row][col].get_piece() != Piece.BLANK:
@@ -282,27 +311,33 @@ class Board:
         else:
             im.save(file)
             
-            
+    """
+    create a cluster for each of the squares on the board
+    """       
     def initialise_clusters(self):
         clusters = []
+        #iterate through each of the rows and cols and create a new cluster at each square
         for row in range(NUM_ROWS):
             row_clusters = []
             for col in range(NUM_COLS):
                 tile = self._board[row][col]
                 #if the piece is an overpass, treat it as two separate tiles for clustering
                 if tile.get_piece() == Piece.OVERPASS:
-                    railway_tile = Tile(Piece.OVERPASS_RAILWAY, tile.get_orientation())
-                    highway_tile = Tile(Piece.OVERPASS_HIGHWAY, tile.get_orientation())
+                    railway_tile = Tile(Piece.OVERPASS_RAILWAY, tile.get_rotation())
+                    highway_tile = Tile(Piece.OVERPASS_HIGHWAY, tile.get_rotation())
                     row_clusters += [[Cluster(row, col, railway_tile), Cluster(row, col, highway_tile)]]
                 else:
                     row_clusters += [[Cluster(row, col, tile)]] #this is a list of clusters to handle overpasses
             clusters += [row_clusters]
         return clusters
     
+    """
+    process all of the start clusters by trying to join them with any adjacent pieces
+    """
     def process_start_clusters(self, start_clusters, other_clusters):
-        #first process all the start clusters
         for start_cluster in start_clusters:
             if start_cluster.row == -1: #these are the top clusters
+                #this is a for loop for overpasses, usually only one element in the list
                 for other_cluster in other_clusters[start_cluster.get_row() + 1][start_cluster.get_col()]:
                     Cluster.try_join_clusters(start_cluster, other_cluster, Side.BOTTOM)
             elif start_cluster.row == NUM_ROWS: #these are the ones on the bottom
@@ -314,7 +349,10 @@ class Board:
             elif start_cluster.col == NUM_COLS: #on the right
                 for other_cluster in other_clusters[start_cluster.get_row()][start_cluster.get_col() - 1]:
                     Cluster.try_join_clusters(start_cluster, other_cluster, Side.LEFT)
-                    
+      
+    """
+    process all non-start clusters by joining them together where there are connections
+    """              
     def process_other_clusters(self, clusters):
         #only reach up and left, this means that every bridge will be processed once
         for row in range(NUM_ROWS):
@@ -330,7 +368,11 @@ class Board:
                     for cluster in clusters[row][col]:
                         for cluster_left in clusters[row][col - 1]:
                             Cluster.try_join_clusters(cluster, cluster_left, Side.LEFT)
-                            
+     
+    """
+    get all the representative elements in the clusters. These are the top of each cluster
+    and contain all information about the cluster
+    """                       
     def get_cluster_representatives(self, start_clusters, clusters):
         cluster_reps = []
         for cluster in start_clusters:
@@ -343,17 +385,19 @@ class Board:
                         cluster_reps += [cluster]
         return cluster_reps
     
+    """
+    check for any illegal clusters that are detached from any start point, these are illegal
+    raises ValueError for any illegal board configurations
+    """
     def check_for_illegal_clusters(self, cluster_reps):
         for cluster in cluster_reps:
-            if not cluster.is_blank_cluster():
-                #check that there is at least one start piece in each cluster
-                for row, col, tile in cluster.get_cluster_tiles():
-                    if tile.get_piece() in [Piece.START_HIGHWAY, Piece.START_RAILWAY]:
-                        break
-                else:
-                    raise ValueError("Cluster has no start element -", cluster.get_cluster_tiles())
+            if not cluster.is_blank_cluster() and cluster.get_start_count() == 0:
+                raise ValueError("Cluster has no start element -", cluster.get_cluster_tiles())
         
-             
+       
+    """
+    find all the clusters in the board, returns a list of clusters
+    """
     def find_clusters(self):
         #first create clusters for all of the start tiles and all the tiles on the board
         start_clusters = []
@@ -370,7 +414,6 @@ class Board:
         #find all the representative elements of the clusters, these have parents that have themselves as parents
         cluster_reps = self.get_cluster_representatives(start_clusters, clusters)
         
-                        
         #do a little check to ensure there aren't any non-blank clusters that aren't attached to an edge
         self.check_for_illegal_clusters(cluster_reps)
         return cluster_reps
@@ -562,32 +605,32 @@ create the board for the game shown in the rulebook
 """
 def rulebook_game():
     board = Board()
-    board.add_tile(0, 1, Piece.HIGHWAY_STRAIGHT, Orientation.DEFAULT)
-    board.add_tile(1, 0, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
-    board.add_tile(1, 1, Piece.OVERPASS, Orientation.DEFAULT)
-    board.add_tile(1, 2, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
-    board.add_tile(1, 3, Piece.THREE_R_JUNCTION, Orientation.TURN_180)
-    board.add_tile(1, 4, Piece.CORNER_STATION, Orientation.DEFAULT, flip=True)
-    board.add_tile(2, 1, Piece.HIGHWAY_STRAIGHT, Orientation.DEFAULT)
-    board.add_tile(2, 3, Piece.HIGHWAY_CORNER, Orientation.TURN_90)
-    board.add_tile(2, 5, Piece.HIGHWAY_CORNER, Orientation.TURN_270)
-    board.add_tile(3, 0, Piece.HIGHWAY_STRAIGHT, Orientation.TURN_90)
-    board.add_tile(3, 1, Piece.HIGHWAY_T, Orientation.DEFAULT)
-    board.add_tile(3, 2, Piece.HIGHWAY_CORNER, Orientation.TURN_270)
-    board.add_tile(3, 5, Piece.HIGHWAY_T, Orientation.TURN_90)
-    board.add_tile(3, 6, Piece.HIGHWAY_STRAIGHT, Orientation.TURN_90)
-    board.add_tile(4, 2, Piece.HIGHWAY_STRAIGHT, Orientation.DEFAULT)
-    board.add_tile(4, 3, Piece.CORNER_STATION, Orientation.TURN_180, flip=False)
-    board.add_tile(4, 4, Piece.HIGHWAY_JUNCTION, Orientation.DEFAULT)
-    board.add_tile(5, 0, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
-    board.add_tile(5, 1, Piece.RAILWAY_T, Orientation.TURN_180)
-    board.add_tile(5, 2, Piece.CORNER_STATION, Orientation.DEFAULT, flip=True)
-    board.add_tile(5, 3, Piece.RAILWAY_STRAIGHT, Orientation.DEFAULT)
-    board.add_tile(5, 6, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
-    board.add_tile(6, 1, Piece.STRAIGHT_STATION, Orientation.DEFAULT)
-    board.add_tile(6, 3, Piece.RAILWAY_T, Orientation.TURN_90)
-    board.add_tile(6, 4, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
-    board.add_tile(6, 5, Piece.CORNER_STATION, Orientation.TURN_270, flip=False)
+    board.add_tile(0, 1, Piece.HIGHWAY_STRAIGHT, Rotation.I)
+    board.add_tile(1, 0, Piece.RAILWAY_STRAIGHT, Rotation.R90)
+    board.add_tile(1, 1, Piece.OVERPASS, Rotation.I)
+    board.add_tile(1, 2, Piece.RAILWAY_STRAIGHT, Rotation.R90)
+    board.add_tile(1, 3, Piece.THREE_R_JUNCTION, Rotation.R180)
+    board.add_tile(1, 4, Piece.CORNER_STATION, Rotation.I, flip=True)
+    board.add_tile(2, 1, Piece.HIGHWAY_STRAIGHT, Rotation.I)
+    board.add_tile(2, 3, Piece.HIGHWAY_CORNER, Rotation.R90)
+    board.add_tile(2, 5, Piece.HIGHWAY_CORNER, Rotation.R270)
+    board.add_tile(3, 0, Piece.HIGHWAY_STRAIGHT, Rotation.R90)
+    board.add_tile(3, 1, Piece.HIGHWAY_T, Rotation.I)
+    board.add_tile(3, 2, Piece.HIGHWAY_CORNER, Rotation.R270)
+    board.add_tile(3, 5, Piece.HIGHWAY_T, Rotation.R90)
+    board.add_tile(3, 6, Piece.HIGHWAY_STRAIGHT, Rotation.R90)
+    board.add_tile(4, 2, Piece.HIGHWAY_STRAIGHT, Rotation.I)
+    board.add_tile(4, 3, Piece.CORNER_STATION, Rotation.R180, flip=False)
+    board.add_tile(4, 4, Piece.HIGHWAY_JUNCTION, Rotation.I)
+    board.add_tile(5, 0, Piece.RAILWAY_STRAIGHT, Rotation.R90)
+    board.add_tile(5, 1, Piece.RAILWAY_T, Rotation.R180)
+    board.add_tile(5, 2, Piece.CORNER_STATION, Rotation.I, flip=True)
+    board.add_tile(5, 3, Piece.RAILWAY_STRAIGHT, Rotation.I)
+    board.add_tile(5, 6, Piece.RAILWAY_STRAIGHT, Rotation.R90)
+    board.add_tile(6, 1, Piece.STRAIGHT_STATION, Rotation.I)
+    board.add_tile(6, 3, Piece.RAILWAY_T, Rotation.R90)
+    board.add_tile(6, 4, Piece.RAILWAY_STRAIGHT, Rotation.R90)
+    board.add_tile(6, 5, Piece.CORNER_STATION, Rotation.R270, flip=False)
     return board
 
 if __name__ == "__main__":
