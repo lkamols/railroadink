@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from PIL import Image
+from PIL import Image, ImageOps
 from time import sleep
 
 NUM_ROWS = 7
@@ -46,6 +46,11 @@ class Piece(Enum):
     #the overpass tile will get split into two separate tiles sometimes
     OVERPASS_RAILWAY = 18
     OVERPASS_HIGHWAY = 19
+    
+SPECIAL_PIECES = [Piece.THREE_H_JUNCTION, Piece.THREE_R_JUNCTION, Piece.HIGHWAY_JUNCTION,
+                  Piece.RAILWAY_JUNCTION, Piece.CORNER_JUNCTION, Piece.CROSS_JUNCTION]
+
+OVERPASS_SEGMENTS = [Piece.OVERPASS_RAILWAY, Piece.OVERPASS_HIGHWAY]
     
 class Orientation(Enum):
     DEFAULT = 0
@@ -125,25 +130,30 @@ class Tile:
         Piece.HIGHWAY_STRAIGHT: "highway-straight.png",
         Piece.OVERPASS: "overpass.png",
         Piece.STRAIGHT_STATION: "straight-station.png",
-        Piece.CORNER_STATION: "corner-station.png",
-        Piece.THREE_H_JUNCTION: "three-h-junction",
-        Piece.THREE_R_JUNCTION: "three-r-junction",
-        Piece.HIGHWAY_JUNCTION: "highway-junction",
-        Piece.RAILWAY_JUNCTION: "railway-junction",
-        Piece.CORNER_JUNCTION: "corner-junction",
-        Piece.CROSS_JUNCTION: "cross-junction",             
+        (Piece.CORNER_STATION, False): "corner-station.png",
+        (Piece.CORNER_STATION, True): "corner-station-flipped.png",
+        Piece.THREE_H_JUNCTION: "three-h-junction.png",
+        Piece.THREE_R_JUNCTION: "three-r-junction.png",
+        Piece.HIGHWAY_JUNCTION: "highway-junction.png",
+        Piece.RAILWAY_JUNCTION: "railway-junction.png",
+        Piece.CORNER_JUNCTION: "corner-junction.png",
+        Piece.CROSS_JUNCTION: "cross-junction.png",             
     }
     
     """
     Constructor
     """
-    def __init__(self, piece, orientation):
+    def __init__(self, piece, orientation, flip=False):
         self._piece = piece
         self._orientation = orientation
+        self._flip = flip
         #load in all the left, right, down, up and overpass values
         #load these upon creation because they will be accessed multiple times
         self._dirs = {}
         self._dirs[Side.TOP], self._dirs[Side.RIGHT], self._dirs[Side.BOTTOM], self._dirs[Side.LEFT] = self._tile_map[piece]
+        #flips occur before rotations
+        if flip:
+            self._reverse()
         self._rotate(orientation)
         
     """
@@ -155,22 +165,34 @@ class Tile:
             #change all the assignments in the same line, handles the required temporary variables
             self._dirs[Side.TOP], self._dirs[Side.RIGHT], self._dirs[Side.BOTTOM], self._dirs[Side.LEFT] = \
                     self._dirs[Side.LEFT], self._dirs[Side.TOP], self._dirs[Side.RIGHT], self._dirs[Side.BOTTOM]
+     
+    """
+    flip the piece, this flips it along the top-left to bottom-right diagonal.
+    why this axis? because it only is required for the corner-station piece, and this flips the railway and highway
+    """               
+    def _reverse(self):
+        self._dirs[Side.TOP], self._dirs[Side.RIGHT], self._dirs[Side.BOTTOM], self._dirs[Side.LEFT] = \
+                self._dirs[Side.LEFT], self._dirs[Side.BOTTOM], self._dirs[Side.RIGHT], self._dirs[Side.TOP]
          
     """
     get the image associated with this piece and orientation, scaled to fit on the board image
     """
     def get_image(self):
         #get the correct image
-        piece_image = Image.open(PHOTOS_FOLDER + self._tile_pics[self._piece])
+        if self._piece == Piece.CORNER_STATION:
+            piece_image = Image.open(PHOTOS_FOLDER + self._tile_pics[(self._piece, self._flip)])
+        else:
+            piece_image = Image.open(PHOTOS_FOLDER + self._tile_pics[self._piece])
         #resize the image
         piece_image = piece_image.resize([BOARD_WIDTH//NUM_COLS, BOARD_HEIGHT//NUM_ROWS], Image.ANTIALIAS)
-        #rotate the image
+        #rotate the image, note that this library does counter clockwise rotations, and we encode in clockwise
+        #so the rotation amounts are inverses
         if self._orientation == Orientation.TURN_90:
-            piece_image.rotate(90)
+            piece_image = piece_image.rotate(270)
         elif self._orientation == Orientation.TURN_180:
-            piece_image.rotate(180)
+            piece_image = piece_image.rotate(180)
         elif self._orientation == Orientation.TURN_270:
-            piece_image.rotate(270)
+            piece_image = piece_image.rotate(90)
         return piece_image
     
     """
@@ -211,12 +233,15 @@ class Board:
         #create an empty board with no tiles in it yet
         self._board = [[Tile(Piece.BLANK, Orientation.DEFAULT)]*NUM_COLS for i in range(NUM_ROWS)]
         self._initialise_start_tiles()
+        self._special_routes = [] #the special routes that have been used
       
     """
     add a tile to the board
     """
-    def add_tile(self, row, col, piece, orientation):
-        self._board[row][col] = Tile(piece, orientation)
+    def add_tile(self, row, col, piece, orientation, flip=False):
+        self._board[row][col] = Tile(piece, orientation, flip)
+        if piece in SPECIAL_PIECES:
+            self._special_routes += [piece]
         
     """
     add a start tile to the board, these are the pieces around the edge
@@ -299,7 +324,6 @@ class Board:
         
         for row in range(NUM_ROWS):
             for col in range(NUM_COLS):
-                print(row, col)
                 #try and join with the cluster above - unless we are in the top row
                 if row != 0:
                     #need to go through this list, there is almost certainly only one element - unless it's an overpass
@@ -324,6 +348,15 @@ class Board:
                     if cluster.is_representative():
                         final_clusters += [cluster]
                         
+        #do a little check to ensure there aren't any non-blank clusters that aren't attached to an edge
+        for cluster in final_clusters:
+            if not cluster.is_blank_cluster():
+                #check that there is at least one start piece in each cluster
+                for row, col, tile in cluster.get_cluster_tiles():
+                    if tile.get_piece() in [Piece.START_HIGHWAY, Piece.START_RAILWAY]:
+                        break
+                else:
+                    raise ValueError("Cluster has no start element -", cluster.get_cluster_tiles())
         return final_clusters
                                              
                 
@@ -369,7 +402,7 @@ class Cluster:
     """
     find an element of the frontier corresponding to the given row, column and side
     """
-    def find_in_frontier(self, row, col, side):
+    def find_in_frontier(self, row, col, side):       
         for ce in self.frontier:
             if ce.row == row and ce.col == col and ce.side == side:
                 return ce
@@ -409,11 +442,16 @@ class Cluster:
     """
     @staticmethod
     def try_join_clusters(tile1, tile2, side):
-        print(tile1.row, tile1.col, tile2.row, tile2.col)
         #get the representative element of each of the tiles
         representative1 = tile1.find_set()
         representative2 = tile2.find_set()
+        
+        #determine whether each of these pieces is an overpass, there are some overpass edge cases
+        isOverpass1 = tile1.tile.get_piece() in OVERPASS_SEGMENTS
+        isOverpass2 = tile2.tile.get_piece() in OVERPASS_SEGMENTS
+        
         #if they are already in the same cluster, don't join them again
+        #THIS MAY NEED TO BE MOVED, MIGHT NEED TO REMOVE THE ELEMENTS FROM THE FRONTIER STILL
         if representative1 == representative2:
             return
         
@@ -424,42 +462,45 @@ class Cluster:
         #now find the element of the frontier of each of them
         #there is only an element on the frontier if it's not a blank edge
         #these may not be defined, but they aren't used unless they are defined
-        if edge1 != Edge.B:
+        #there is an edge case when processing overpasses that this edge may have been added to another cluster
+        #and removed from consideration, there is a check for that edge case as well
+        if edge1 != Edge.B and not (isOverpass2 and edge2 == Edge.B):
             frontierEdge1 = representative1.find_in_frontier(tile1.row, tile1.col, side)
-        if edge2 != Edge.B:
+        if edge2 != Edge.B and not (isOverpass1 and edge1 == Edge.B):
             frontierEdge2 = representative2.find_in_frontier(tile2.row, tile2.col, Side.opposite(side))
         
         #consider the cases with two blank clusters, they will get joined together
         if representative1.blank_cluster and representative2.blank_cluster:
-            print("A")
             #if both clusters are blank clusters, join them together
             Cluster._join_clusters(representative1, representative2)
         #check for if there is one blank cluster and the other isn't
         elif representative1.blank_cluster and not representative2.blank_cluster:
-            print("B")
             #if there is an edge leading into the blank cluster though, add it
             #this allows us to detect detached squares
             if edge2 != Edge.B:
                 representative1.frontier += [frontierEdge2]
         elif representative2.blank_cluster and not representative1.blank_cluster:
-            print("C")
             if edge1 != Edge.B:
                 representative2.frontier += [frontierEdge1]
         #at this point in the chain, they are both not blank clusters
         #if they are the same we will be joining the clusters together, remove the edges that joined them together
         elif (edge1 == Edge.H and edge2 == Edge.H) or (edge1 == Edge.R and edge2 == Edge.R):
-            print("D")
             representative1.remove_from_frontier(frontierEdge1)
             representative2.remove_from_frontier(frontierEdge2)
             Cluster._join_clusters(representative1, representative2)
         #if they have clashes, then this is a problem and raise an error to say that this board is invalid
         elif (edge1 == Edge.H and edge2 == Edge.R) or (edge1 == Edge.R and edge2 == Edge.H):
-            print("E")
             raise ValueError("board invalid - clash between ({0},{1}) and ({2},{3})".format(
                     tile1.row, tile1.col, tile2.row, tile2.col))
-        #otherwise we have at least one blank joining non blank clusters, keep them detached
+        #if we have a non-blank running into a blank (but neither are blank clusters), remove the side running into the
+        #blank from the cluster, because we won't ever be able to join to it, this is a -1 point, but we are only
+        #interested in point changes
+        #don't do this for overpass segments, because there is 'another' tile there
+        elif edge1 == Edge.B and not isOverpass1 and edge2 != Edge.B:
+            representative2.remove_from_frontier(frontierEdge2)
+        elif edge2 == Edge.B and not isOverpass2 and edge1 != Edge.B:
+            representative1.remove_from_frontier(frontierEdge1)
             
-        #otherwise there were two tiled clusters, without a valid join between them, in this case leave them separate
     
     def get_row(self):
         return self.row
@@ -472,17 +513,50 @@ class Cluster:
     
     def is_representative(self):
         return self.parent == self
+    
+    def is_blank_cluster(self):
+        return self.blank_cluster
+    
+    def get_cluster_tiles(self):
+        return self.cluster_tiles
         
         
-            
+
+
+def rulebook_game():
+    board = Board()
+    board.add_tile(0, 1, Piece.HIGHWAY_STRAIGHT, Orientation.DEFAULT)
+    board.add_tile(1, 0, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
+    board.add_tile(1, 1, Piece.OVERPASS, Orientation.DEFAULT)
+    board.add_tile(1, 2, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
+    board.add_tile(1, 3, Piece.THREE_R_JUNCTION, Orientation.TURN_180)
+    board.add_tile(1, 4, Piece.CORNER_STATION, Orientation.DEFAULT, flip=True)
+    board.add_tile(2, 1, Piece.HIGHWAY_STRAIGHT, Orientation.DEFAULT)
+    board.add_tile(2, 3, Piece.HIGHWAY_CORNER, Orientation.TURN_90)
+    board.add_tile(2, 5, Piece.HIGHWAY_CORNER, Orientation.TURN_270)
+    board.add_tile(3, 0, Piece.HIGHWAY_STRAIGHT, Orientation.TURN_90)
+    board.add_tile(3, 1, Piece.HIGHWAY_T, Orientation.DEFAULT)
+    board.add_tile(3, 2, Piece.HIGHWAY_CORNER, Orientation.TURN_270)
+    board.add_tile(3, 5, Piece.HIGHWAY_T, Orientation.TURN_90)
+    board.add_tile(3, 6, Piece.HIGHWAY_STRAIGHT, Orientation.TURN_90)
+    board.add_tile(4, 2, Piece.HIGHWAY_STRAIGHT, Orientation.DEFAULT)
+    board.add_tile(4, 3, Piece.CORNER_STATION, Orientation.TURN_180, flip=False)
+    board.add_tile(4, 4, Piece.HIGHWAY_JUNCTION, Orientation.DEFAULT)
+    board.add_tile(5, 0, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
+    board.add_tile(5, 1, Piece.RAILWAY_T, Orientation.TURN_180)
+    board.add_tile(5, 2, Piece.CORNER_STATION, Orientation.DEFAULT, flip=True)
+    board.add_tile(5, 3, Piece.RAILWAY_STRAIGHT, Orientation.DEFAULT)
+    board.add_tile(5, 6, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
+    board.add_tile(6, 1, Piece.STRAIGHT_STATION, Orientation.DEFAULT)
+    board.add_tile(6, 3, Piece.RAILWAY_T, Orientation.TURN_90)
+    board.add_tile(6, 4, Piece.RAILWAY_STRAIGHT, Orientation.TURN_90)
+    board.add_tile(6, 5, Piece.CORNER_STATION, Orientation.TURN_270, flip=False)
+    return board
 
 if __name__ == "__main__":
 
-    board = Board()
-    board.add_tile(2,3, Piece.RAILWAY_CORNER, Orientation.DEFAULT)
-    #board.fancy_board_print()
+    board = rulebook_game()
+    board.fancy_board_print()
     clusters = board.find_clusters()
     for cluster in clusters:
-        print(cluster.cluster_tiles)
-    
-    print(Side.opposite(Side.TOP))
+        print(cluster.get_cluster_tiles())
