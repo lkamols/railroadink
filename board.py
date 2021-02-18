@@ -264,6 +264,8 @@ class Board:
         self._board = [[Tile(Piece.BLANK, Rotation.I)]*NUM_COLS for i in range(NUM_ROWS)]
         self._initialise_start_tiles()
         self._special_routes = [] #the special routes that have been used
+        self._cluster_reps = None
+        self._clusters_up_to_date = False #keeps track of whether the currently stored clusters are up to date
       
     """
     add a tile to the board
@@ -272,6 +274,7 @@ class Board:
         self._board[row][col] = Tile(piece, rotation, flip)
         if piece in SPECIAL_PIECES:
             self._special_routes += [piece]
+        self._clusters_up_to_date = False #if any tiles are added, the clustering is invalid
         
     """
     add a start tile to the board, these are the pieces around the edge
@@ -416,7 +419,23 @@ class Board:
         
         #do a little check to ensure there aren't any non-blank clusters that aren't attached to an edge
         self._check_for_illegal_clusters(cluster_reps)
+        
+        #update the knowledge of the clusters
+        self._cluster_reps = cluster_reps
+        self._clusters_up_to_date = True
         return cluster_reps
+    
+    """
+    get all the squares which pieces could be placed in
+    """
+    def get_free_squares(self):
+        if not self._clusters_up_to_date:
+            self.find_clusters()
+            
+        free_squares = []
+        for cluster_rep in cluster_reps:
+            if cluster_rep.is_blank_cluster() and 
+        
      
     #GETTER METHODS
                                         
@@ -575,6 +594,21 @@ class Cluster:
             
     #GETTER METHODS
     
+    """
+    return whether this cluster object is the representative element of its cluster set
+    """
+    def is_representative(self):
+        return self._parent == self
+    
+    """
+    return whether a cluster can have new pieces placed in it
+    """
+    def is_free_blank_cluster(self):
+        #a cluster can have pieces placed in it if it is blank and is not isolated
+        #elements are added to the frontier for connections, if the frontier is empty
+        #it is isolated
+        return is_blank_cluster() and len(self._frontier) > 0
+    
     def get_row(self):
         return self._row
     
@@ -583,9 +617,6 @@ class Cluster:
     
     def get_parent(self):
         return self._parent
-    
-    def is_representative(self):
-        return self._parent == self
     
     def is_blank_cluster(self):
         return self._blank_cluster
@@ -636,7 +667,7 @@ def rulebook_game():
 if __name__ == "__main__":
 
     board = rulebook_game()
-    board.fancy_board_print()
+    #board.fancy_board_print()
     clusters = board.find_clusters()
     for cluster in clusters:
         print(cluster.get_start_count())
