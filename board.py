@@ -10,8 +10,13 @@ TOP_OFFSET = 44
 LEFT_OFFSET = 30
 BOARD_WIDTH = 669
 BOARD_HEIGHT = 669
+SQUARE_WIDTH = BOARD_WIDTH//NUM_COLS
+SQUARE_HEIGHT = BOARD_HEIGHT//NUM_ROWS
 
 PHOTOS_FOLDER = "Railroad-Pictures/"
+
+#some colours to use
+RGB_GREEN = (11, 102, 35)
 
 """
 Enum for the types of edges that can be on a piece
@@ -161,6 +166,24 @@ class Tile:
         Piece.CROSS_JUNCTION: "cross-junction.png",             
     }
     
+    _tile_variations = {
+        Piece.RAILWAY_CORNER: (4, False),
+        Piece.RAILWAY_T: (4, False),
+        Piece.RAILWAY_STRAIGHT: (2, False),
+        Piece.HIGHWAY_CORNER: (4, False),
+        Piece.HIGHWAY_T: (4, False),
+        Piece.HIGHWAY_STRAIGHT: (2, False),
+        Piece.OVERPASS: (2, False),
+        Piece.STRAIGHT_STATION: (4, False),
+        Piece.CORNER_STATION: (4, True),
+        Piece.THREE_H_JUNCTION: (4, False),
+        Piece.THREE_R_JUNCTION: (4, False),
+        Piece.HIGHWAY_JUNCTION: (1, False),
+        Piece.RAILWAY_JUNCTION: (1, False),
+        Piece.CORNER_JUNCTION: (4, False),
+        Piece.CROSS_JUNCTION: (2, False),  
+    }
+    
     """
     Constructor, given a piece and a rotation
     """
@@ -217,6 +240,22 @@ class Tile:
         return piece_image
     
     """
+    get a list of all the possible variations of a given piece
+    """
+    @staticmethod
+    def get_variations(piece):
+        rotations, flip = Tile._tile_variations[piece]
+        variations = []
+        #apply each of the rotations to create new tiles
+        for rotation_val in range(rotations):
+            variations += [Tile(piece, Rotation(rotation_val))]
+        #then if we can reverse it as well, do that
+        if flip:
+            for rotation_val in range(rotations):
+                variations += [Tile(piece, Rotation(rotation_val), flip=True)]
+        return variations
+    
+    """
     get the edge type associated with one of the directions
     """
     def get_edge_type_on_side(self, side):
@@ -246,9 +285,9 @@ class Tile:
     override the representation function so printing is readable
     """
     def __repr__(self):
-        return "({0},{1},{2},{3},{4},{5})".format(self._piece.name, self._rotation.name, 
+        return "({0},{1},{2},{3},{4},{5}{6})".format(self._piece.name, self._rotation.name, 
                self._dirs[Side.TOP].name, self._dirs[Side.RIGHT].name, self._dirs[Side.BOTTOM].name,
-               self._dirs[Side.LEFT].name)
+               self._dirs[Side.LEFT].name, ",flipped" if self._flip else "")
  
 """
 A class for all the information about a given state of play
@@ -296,7 +335,7 @@ class Board:
     creates an image corresponding to the board,
     file - the location to store the new image, if the file is None, displays it
     """
-    def fancy_board_print(self, file=None):
+    def fancy_board_print(self, file=None, show_free_squares=False):
         #create a new image with the board in the background
         board = Image.open(PHOTOS_FOLDER + "board.png")
         im = Image.new('RGB', board.size)
@@ -307,6 +346,18 @@ class Board:
                 if self._board[row][col].get_piece() != Piece.BLANK:
                     piece_image = self._board[row][col].get_image()
                     im.paste(piece_image, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
+        
+        #now if we are displaying the free squares, do so
+        if show_free_squares:
+            free_squares = self.get_free_squares()
+            for square in free_squares:
+                row = square[0]
+                col = square[1]
+                square_im = Image.new("RGB", (SQUARE_WIDTH//2, SQUARE_HEIGHT//2),  color="green")
+                im.paste(square_im, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS + SQUARE_WIDTH//4, 
+                                     TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS + SQUARE_HEIGHT//4))
+        
+        
         
         #now display the image, depending on if a file is given
         if file == None:
@@ -429,12 +480,16 @@ class Board:
     get all the squares which pieces could be placed in
     """
     def get_free_squares(self):
+        #check if the clusters are up to date and if not, update them
         if not self._clusters_up_to_date:
             self.find_clusters()
             
         free_squares = []
-        for cluster_rep in cluster_reps:
-            if cluster_rep.is_blank_cluster() and 
+        for cluster_rep in self._cluster_reps:
+            if cluster_rep.is_free_blank_cluster():
+                free_squares += cluster_rep.get_cluster_tiles()
+        return free_squares
+        
         
      
     #GETTER METHODS
@@ -607,7 +662,7 @@ class Cluster:
         #a cluster can have pieces placed in it if it is blank and is not isolated
         #elements are added to the frontier for connections, if the frontier is empty
         #it is isolated
-        return is_blank_cluster() and len(self._frontier) > 0
+        return self.is_blank_cluster() and len(self._frontier) > 0
     
     def get_row(self):
         return self._row
@@ -667,10 +722,13 @@ def rulebook_game():
 if __name__ == "__main__":
 
     board = rulebook_game()
-    #board.fancy_board_print()
+    #board.fancy_board_print(show_free_squares=True)
+    """
     clusters = board.find_clusters()
     for cluster in clusters:
         print(cluster.get_start_count())
         print(cluster.get_cluster_tiles())
         print(cluster.get_frontier())
     print(board.get_used_special_routes())
+    """
+    print(Tile.get_variations(Piece.CORNER_STATION))
