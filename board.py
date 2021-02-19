@@ -177,6 +177,16 @@ class Edge:
     def __repr__(self):
         return "({0},{1},{2})".format(self._row, self._col, "V" if self._vertical else "H")
     
+    #GETTERS
+    def get_row(self):
+        return self._row
+    
+    def get_col(self):
+        return self._col
+    
+    def is_vertical(self):
+        return self._vertical
+    
 #start locations of all the highways and railways
 HIGHWAY_START_POSITIONS = [(-1, 1, Rotation.R180), (-1, 5, Rotation.R180),
                            (3, -1, Rotation.R90), (3, NUM_COLS, Rotation.R270),
@@ -563,7 +573,22 @@ class Board:
         #update the knowledge of the clusters
         self._cluster_reps = cluster_reps
         self._clusters_up_to_date = True
+        
+        #we are going to need the free squares in various different places, so work them out once initially
+        self._determine_free_squares()
+        
         return cluster_reps
+    
+    """
+    finds and stores the list of all free squares on the board
+    """
+    def _determine_free_squares(self):
+        self._free_squares = []
+        for cluster_rep in self._cluster_reps:
+            if cluster_rep.is_free_blank_cluster():
+                #take off the tile element, we only care about locations
+                for row, col, tile in cluster_rep.get_cluster_tiles():
+                    self._free_squares += [(row, col)]       
     
     """
     get all the squares which pieces could be placed in, returns a list of (row, col) pairs
@@ -572,14 +597,7 @@ class Board:
         #check if the clusters are up to date and if not, update them
         if not self._clusters_up_to_date:
             self.find_clusters()
-            
-        free_squares = []
-        for cluster_rep in self._cluster_reps:
-            if cluster_rep.is_free_blank_cluster():
-                #take off the tile element, we only care about locations
-                for row, col, tile in cluster_rep.get_cluster_tiles():
-                    free_squares += [(row, col)]
-        return free_squares
+        return self._free_squares
         
     """
     returns a list of (edge, edgeType) pairs corresponding to the ends of each of the clusters
@@ -613,6 +631,93 @@ class Board:
             if (row + 1, col) in free_squares:
                 edges += [Edge.get_edge_of_piece(row, col, Side.BOTTOM)]
         return edges
+    
+    """
+    get all the paths between clusters
+    """
+    def get_cluster_paths(self):
+        #check if the clusters are up to date and if not, update them
+        if not self._clusters_up_to_date:
+            self.find_clusters()
+        
+        #first do a small amount of processing to get the clusters we are interested in
+        cluster_identifiers = [] #list of all the clusters with pieces in them
+        identifier_to_cluster = {}
+        for cluster in self._cluster_reps:
+            #only care about non-blank clusters with points to connect to
+            if not cluster.is_blank_cluster() and len(cluster.get_frontier()) > 0:
+                cluster_identifiers += [cluster.get_identifier()]
+                identifier_to_cluster[cluster.get_identifier()] = cluster
+                
+        cluster_identifiers.sort()
+        print(cluster_identifiers)
+                
+        #next create a dictionary for identifying whether a particular piece has a cluster edge
+        edges = {}
+        for c_id in cluster_identifiers:
+            cluster = identifier_to_cluster[c_id]
+            for clusterEdge in cluster.get_frontier():
+                edges[(clusterEdge.row, clusterEdge.col, clusterEdge.side)] = c_id
+                
+        #next determine all the paths from each start location
+        free_square_set = set(self.get_free_squares()) #lots of lookups, make a set
+        for c_id in cluster_identifiers:
+            cluster = identifier_to_cluster[c_id]
+            for clusterEdge in cluster.get_frontier():
+                paths = self._path_dfs(c_id, [(clusterEdge.row, clusterEdge.col, clusterEdge.side)], edges, free_square_set)
+                print(c_id, paths)
+        
+       
+    """
+    given a row, col and side, returns a (row, col, side) tuple that is the other side of the same edge.
+    e.g (0,0,RIGHT) shares an edge with (0,1,LEFT)
+    """
+    def opposite_edge(self, row, col, side):
+        if side == Side.TOP:
+            return row - 1, col, Side.BOTTOM
+        elif side == Side.RIGHT:
+            return row, col + 1, Side.LEFT
+        elif side == Side.BOTTOM:
+            return row + 1, col, Side.TOP
+        elif side == Side.LEFT:
+            return row, col - 1, Side.RIGHT
+        else:
+            raise ValueError("cannot take the opposite edge of the given side")
+        
+    """
+    use DFS to determine all the paths that continue from a location and run into a cluster edge
+    of a cluster different to the cluster with the start_cluster_id
+    path is a list of (row, col, Side) tuples tracing the path
+    """       
+    def _path_dfs(self, start_cluster_id, path, edges, free_square_set):
+        #get the last edge
+        last_edge = path[-1]
+        #translate this to the other side of the edge, which is where the next piece must go
+        row, col, side = self.opposite_edge(last_edge[0], last_edge[1], last_edge[2])
+        
+        #if this opposite edge is a cluster edge, we have a valid path and we can stop here
+        opposite_edge_id = edges.get((row, col, side))
+        if opposite_edge_id != None:
+            #to only add each path in one direction, always go in the increasing id direction
+            if opposite_edge_id > start_cluster_id:
+                return [(edges.get((row, col, side)), path)]
+            else:
+                return []
+        
+        #another base case is if we have gone too far
+        if len(path) >= 6: #MAGIC NUMBER, REMOVE LATER
+            return [] #there are no paths to return
+        
+        #can only continue if the square is a free set
+        if (row, col) in free_square_set:
+            paths = []
+            for next_side in Side:
+                if next_side != side:
+                    paths += self._path_dfs(start_cluster_id, list(path) + [(row, col, next_side)], edges, free_square_set)
+            return paths
+        else: #this is not a square that we can continue on
+            return []
+            
      
     #GETTER METHODS
                                         
@@ -806,6 +911,12 @@ class Cluster:
     
     def get_start_count(self):
         return self._start_count
+    
+    """
+    get an identifier for the cluster, this will be a unique number for each cluster
+    """
+    def get_identifier(self):
+        return 100 * self._tile.get_piece().value + 8*self._row + self._col
         
 
 """
@@ -903,13 +1014,15 @@ if __name__ == "__main__":
     board = rulebook_game()
     #board.fancy_board_print(show_free_squares=True)
 
-    clusters = board.find_clusters()
-    for cluster in clusters:
+    #clusters = board.find_clusters()
+    #for cluster in clusters:
         #print(cluster.get_start_count())
         #print(cluster.get_cluster_tiles())
-        print(cluster.get_frontier())
+        #print(cluster.get_frontier())
     #print(board.get_used_special_routes())
     
     #print(board.get_free_squares())
     #print(board._get_cluster_representatives)
+    
+    board.get_cluster_paths()
     

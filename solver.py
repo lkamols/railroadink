@@ -43,8 +43,37 @@ class LastMoveSolver:
                 return False
         #if we made it this far, there were no clashes, and the placement is possible
         return True
+    
+    """
+    creates all the constraints relating to clashes on internal edges, adds constraints preventing railways and highways
+    running into each other
+    """
+    def _clashes_on_edge_constraints(self, m, T, X, internal_edges):
+        edge_constraints = {}
+        for edge in internal_edges:
+            if edge.is_vertical():
+                sLeft = (edge.get_row(), edge.get_col() - 1)
+                sRight = (edge.get_row(), edge.get_col())
+                #there can only be either a highway on the left OR a railway on the right
+                edge_constraints[edge, "H"] = m.addConstr(quicksum(X[t,sLeft] for t in T if (t, sLeft) in X and t.get_edge_type_on_side(Side.RIGHT) == EdgeType.H) +
+                                quicksum(X[t, sRight] for t in T if (t, sRight) in X and t.get_edge_type_on_side(Side.LEFT) == EdgeType.R) <= 1)
+                #similarly there can only be a railway on the left OR a highway on the right
+                edge_constraints[edge, "R"] = m.addConstr(quicksum(X[t,sLeft] for t in T if (t, sLeft) in X and t.get_edge_type_on_side(Side.RIGHT) == EdgeType.R) +
+                                quicksum(X[t, sRight] for t in T if (t, sRight) in X and t.get_edge_type_on_side(Side.LEFT) == EdgeType.H) <= 1)
+            else: #horizontal
+                sTop = (edge.get_row() - 1, edge.get_col())
+                sBottom = (edge.get_row(), edge.get_col())
+                #there can only be either a highway on the top OR a railway on the bottom
+                edge_constraints[edge, "H"] = m.addConstr(quicksum(X[t,sTop] for t in T if (t, sTop) in X and t.get_edge_type_on_side(Side.BOTTOM) == EdgeType.H) +
+                                quicksum(X[t, sBottom] for t in T if (t, sBottom) in X and t.get_edge_type_on_side(Side.TOP) == EdgeType.R) <= 1)
+                #similarly, railway top OR highway bottom
+                edge_constraints[edge, "H"] = m.addConstr(quicksum(X[t,sTop] for t in T if (t, sTop) in X and t.get_edge_type_on_side(Side.BOTTOM) == EdgeType.R) +
+                                quicksum(X[t, sBottom] for t in T if (t, sBottom) in X and t.get_edge_type_on_side(Side.TOP) == EdgeType.H) <= 1)
+        return edge_constraints
                 
-        
+    """
+    construct the model used to solve the last move railroad ink problem
+    """    
     def _make_model(self):
         m = Model("railroad-ink")
         
@@ -72,9 +101,14 @@ class LastMoveSolver:
             m.addConstr(quicksum(X[t,s] for t in T if (t,s) in X) <= 1)
             for s in S}
             
+        edge_constraints = self._clashes_on_edge_constraints(m, T, X, internal_edges) 
+            
         return m
     
     
+    """
+    print the board with the solution attached
+    """
     def _print_result(self, m):
         #find all the pieces and placements that we had and add them to the board
         for t, s in self._X:
