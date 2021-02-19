@@ -4,6 +4,7 @@ from PIL import Image
 
 NUM_ROWS = 7
 NUM_COLS = 7
+NUM_SPECIALS = 3
 
 #photo measurements to get the positioning correct
 TOP_OFFSET = 44
@@ -21,10 +22,23 @@ RGB_GREEN = (11, 102, 35)
 """
 Enum for the types of edges that can be on a piece
 """
-class Edge(Enum):
+class EdgeType(Enum):
     R = 0 #railway
     H = 1 #highway
     B = 2 #blank
+    
+    
+    """
+    returns the type of edge that clashes with this edge
+    """
+    @staticmethod
+    def clash_type(edgeType):
+        if edgeType == EdgeType.R:
+            return EdgeType.H
+        elif edgeType == EdgeType.H:
+            return EdgeType.R
+        else:
+            raise ValueError("clashes only exist for highways and railways")
    
 """
 All the different possible pieces
@@ -56,6 +70,8 @@ class Piece(Enum):
     #the overpass tile will get split into two separate tiles sometimes
     OVERPASS_RAILWAY = 18
     OVERPASS_HIGHWAY = 19
+    #an overarching one for all the special tiles, to say we have a special tile
+    SPECIAL = 20
     
 #grouping of pieces
 BASIC_PIECES = [Piece.RAILWAY_CORNER, Piece.RAILWAY_T, Piece.RAILWAY_STRAIGHT,
@@ -107,8 +123,59 @@ class ClusterEdge:
     row: int
     col: int
     side: Side
-    edge: Edge
+    edgeType: EdgeType
     
+"""
+class for an edge between two squares, has the (row, col) of the start corner and then if 
+vertical is True, goes downwards, if vertical is False, goes right
+"""
+class Edge:
+    
+    """
+    Constructor.
+    """
+    def __init__(self, row, col, vertical):
+        self._row = row
+        self._col = col
+        self._vertical = vertical
+        
+    """
+    gets the edge given a piece and a side, this creates the same edge if two piece sides are touching
+    e.g (1,1) is to the left of (1,2) so (1,1,RIGHT) and (1,2,LEFT) would have create the same edge
+    """
+    @staticmethod
+    def get_edge_of_piece(row, col, side):
+        if side == Side.TOP:
+            return Edge(row, col, False)
+        elif side == Side.RIGHT:
+            return Edge(row, col + 1, True)
+        elif side == Side.BOTTOM:
+            return Edge(row + 1, col, False)
+        elif side == Side.LEFT:
+            return Edge(row, col, True)
+        else:
+            raise ValueError("invalid side argument")
+        
+    """
+    override the equals function to use the row, col and vertical values to determine equality
+    """
+    def __eq__(self, obj):
+        if not isinstance(obj, Edge):
+            return False
+        else:
+            return self._row == obj._row and self._col == obj._col and self._vertical == obj._vertical
+        
+    """
+    override the hash function for table look ups
+    """
+    def __hash__(self):
+        return hash((self._row, self._col, self._vertical))
+        
+    """
+    override the repr function to print nicely
+    """
+    def __repr__(self):
+        return "({0},{1},{2})".format(self._row, self._col, "V" if self._vertical else "H")
     
 #start locations of all the highways and railways
 HIGHWAY_START_POSITIONS = [(-1, 1, Rotation.R180), (-1, 5, Rotation.R180),
@@ -125,26 +192,26 @@ class Tile:
     
     #map of all the tiles in their default rotation
     _tile_map = {
-        Piece.RAILWAY_CORNER: (Edge.R, Edge.B, Edge.B, Edge.R),
-        Piece.RAILWAY_T: (Edge.R, Edge.R, Edge.B, Edge.R),
-        Piece.RAILWAY_STRAIGHT: (Edge.R, Edge.B, Edge.R, Edge.B),
-        Piece.HIGHWAY_CORNER: (Edge.H, Edge.B, Edge.B, Edge.H),
-        Piece.HIGHWAY_T: (Edge.H, Edge.H, Edge.B, Edge.H),
-        Piece.HIGHWAY_STRAIGHT: (Edge.H, Edge.B, Edge.H, Edge.B),
-        Piece.OVERPASS: (Edge.H, Edge.R, Edge.H, Edge.R),
-        Piece.STRAIGHT_STATION: (Edge.R, Edge.B, Edge.H, Edge.B),
-        Piece.CORNER_STATION: (Edge.R, Edge.B, Edge.B, Edge.H),
-        Piece.THREE_H_JUNCTION: (Edge.H, Edge.H, Edge.R, Edge.H),
-        Piece.THREE_R_JUNCTION: (Edge.H, Edge.R, Edge.R, Edge.R),
-        Piece.HIGHWAY_JUNCTION: (Edge.H, Edge.H, Edge.H, Edge.H),
-        Piece.RAILWAY_JUNCTION: (Edge.R, Edge.R, Edge.R, Edge.R),
-        Piece.CORNER_JUNCTION: (Edge.H, Edge.R, Edge.R, Edge.H),
-        Piece.CROSS_JUNCTION: (Edge.H, Edge.R, Edge.H, Edge.R),  
-        Piece.START_RAILWAY: (Edge.R, Edge.B, Edge.B, Edge.B),
-        Piece.START_HIGHWAY: (Edge.H, Edge.B, Edge.B, Edge.B),
-        Piece.BLANK: (Edge.B, Edge.B, Edge.B, Edge.B),
-        Piece.OVERPASS_RAILWAY: (Edge.B, Edge.R, Edge.B, Edge.R),
-        Piece.OVERPASS_HIGHWAY: (Edge.H, Edge.B, Edge.H, Edge.B)
+        Piece.RAILWAY_CORNER: (EdgeType.R, EdgeType.B, EdgeType.B, EdgeType.R),
+        Piece.RAILWAY_T: (EdgeType.R, EdgeType.R, EdgeType.B, EdgeType.R),
+        Piece.RAILWAY_STRAIGHT: (EdgeType.R, EdgeType.B, EdgeType.R, EdgeType.B),
+        Piece.HIGHWAY_CORNER: (EdgeType.H, EdgeType.B, EdgeType.B, EdgeType.H),
+        Piece.HIGHWAY_T: (EdgeType.H, EdgeType.H, EdgeType.B, EdgeType.H),
+        Piece.HIGHWAY_STRAIGHT: (EdgeType.H, EdgeType.B, EdgeType.H, EdgeType.B),
+        Piece.OVERPASS: (EdgeType.H, EdgeType.R, EdgeType.H, EdgeType.R),
+        Piece.STRAIGHT_STATION: (EdgeType.R, EdgeType.B, EdgeType.H, EdgeType.B),
+        Piece.CORNER_STATION: (EdgeType.R, EdgeType.B, EdgeType.B, EdgeType.H),
+        Piece.THREE_H_JUNCTION: (EdgeType.H, EdgeType.H, EdgeType.R, EdgeType.H),
+        Piece.THREE_R_JUNCTION: (EdgeType.H, EdgeType.R, EdgeType.R, EdgeType.R),
+        Piece.HIGHWAY_JUNCTION: (EdgeType.H, EdgeType.H, EdgeType.H, EdgeType.H),
+        Piece.RAILWAY_JUNCTION: (EdgeType.R, EdgeType.R, EdgeType.R, EdgeType.R),
+        Piece.CORNER_JUNCTION: (EdgeType.H, EdgeType.R, EdgeType.R, EdgeType.H),
+        Piece.CROSS_JUNCTION: (EdgeType.H, EdgeType.R, EdgeType.H, EdgeType.R),  
+        Piece.START_RAILWAY: (EdgeType.R, EdgeType.B, EdgeType.B, EdgeType.B),
+        Piece.START_HIGHWAY: (EdgeType.H, EdgeType.B, EdgeType.B, EdgeType.B),
+        Piece.BLANK: (EdgeType.B, EdgeType.B, EdgeType.B, EdgeType.B),
+        Piece.OVERPASS_RAILWAY: (EdgeType.B, EdgeType.R, EdgeType.B, EdgeType.R),
+        Piece.OVERPASS_HIGHWAY: (EdgeType.H, EdgeType.B, EdgeType.H, EdgeType.B)
         }
     
     _tile_pics = {
@@ -279,7 +346,7 @@ class Tile:
         if not isinstance(obj, Tile):
             return False
         else:
-            return (self.piece == obj.piece and self._rotation == obj._rotation and self._flip == obj._flip)
+            return (self._piece == obj._piece and self._rotation == obj._rotation and self._flip == obj._flip)
     
     """
     override the representation function so printing is readable
@@ -288,6 +355,12 @@ class Tile:
         return "({0},{1},{2},{3},{4},{5}{6})".format(self._piece.name, self._rotation.name, 
                self._dirs[Side.TOP].name, self._dirs[Side.RIGHT].name, self._dirs[Side.BOTTOM].name,
                self._dirs[Side.LEFT].name, ",flipped" if self._flip else "")
+        
+    """
+    override the hash function to treat two tiles with the same piece types, rotation and flip as the same
+    """
+    def __hash__(self):
+        return hash((self._piece, self._rotation, self._flip))
  
 """
 A class for all the information about a given state of play
@@ -305,6 +378,7 @@ class Board:
         self._special_routes = [] #the special routes that have been used
         self._cluster_reps = None
         self._clusters_up_to_date = False #keeps track of whether the currently stored clusters are up to date
+        self._solution_locations = []
       
     """
     add a tile to the board
@@ -314,6 +388,16 @@ class Board:
         if piece in SPECIAL_PIECES:
             self._special_routes += [piece]
         self._clusters_up_to_date = False #if any tiles are added, the clustering is invalid
+        
+    """
+    add a solution tile to the board, treated like a normal tile, but will be printed with a light green overlay
+    """
+    def add_solution_tile(self, row, col, tile):
+        self._board[row][col] = tile
+        if tile.get_piece() in SPECIAL_PIECES:
+            self._special_routes += [tile.get_piece()]
+        self._clusters_up_to_date = False
+        self._solution_locations += [(row, col)]
         
     """
     add a start tile to the board, these are the pieces around the edge
@@ -357,6 +441,11 @@ class Board:
                 im.paste(square_im, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS + SQUARE_WIDTH//4, 
                                      TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS + SQUARE_HEIGHT//4))
         
+        
+        for row, col in self._solution_locations:
+            solution_overlay = Image.new("RGB", (SQUARE_WIDTH//4, SQUARE_HEIGHT//4), color="blue")
+            im.paste(solution_overlay, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, 
+                                        TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
         
         
         #now display the image, depending on if a file is given
@@ -477,7 +566,7 @@ class Board:
         return cluster_reps
     
     """
-    get all the squares which pieces could be placed in
+    get all the squares which pieces could be placed in, returns a list of (row, col) pairs
     """
     def get_free_squares(self):
         #check if the clusters are up to date and if not, update them
@@ -487,10 +576,43 @@ class Board:
         free_squares = []
         for cluster_rep in self._cluster_reps:
             if cluster_rep.is_free_blank_cluster():
-                free_squares += cluster_rep.get_cluster_tiles()
+                #take off the tile element, we only care about locations
+                for row, col, tile in cluster_rep.get_cluster_tiles():
+                    free_squares += [(row, col)]
         return free_squares
         
+    """
+    returns a list of (edge, edgeType) pairs corresponding to the ends of each of the clusters
+    """
+    def get_all_cluster_ends(self):
+        #check if the clusters are up to date and if not, update them
+        if not self._clusters_up_to_date:
+            self.find_clusters()
         
+        #now go through all the clusters, and the frontiers and gather the edges they are on
+        cluster_ends = []
+        for cluster_rep in self._cluster_reps:
+            if not cluster_rep.is_blank_cluster():
+                for clusterEdge in cluster_rep.get_frontier():
+                    cluster_ends += [(Edge.get_edge_of_piece(clusterEdge.row, clusterEdge.col, clusterEdge.side), 
+                                      clusterEdge.edgeType)]
+        return cluster_ends
+    
+    """
+    returns a list of edges corresponding to all the internal edges that are available
+    """
+    def get_available_internal_edges(self):
+        free_squares = self.get_free_squares()
+        edges = []
+        #iterate through them all and check for right and down
+        #this is a brute force search which could be sped up BUT it is a really small search and won't take long anyway
+        for row, col in free_squares:
+            #first check to the right
+            if (row, col + 1) in free_squares:
+                edges += [Edge.get_edge_of_piece(row, col, Side.RIGHT)]
+            if (row + 1, col) in free_squares:
+                edges += [Edge.get_edge_of_piece(row, col, Side.BOTTOM)]
+        return edges
      
     #GETTER METHODS
                                         
@@ -529,9 +651,9 @@ class Cluster:
         self._frontier = []
         if not self._blank_cluster:
             for side in Side:
-                edge = tile.get_edge_type_on_side(side)
-                if edge != Edge.B:
-                    self._frontier += [ClusterEdge(row, col, side, edge)]
+                edgeType = tile.get_edge_type_on_side(side)
+                if edgeType != EdgeType.B:
+                    self._frontier += [ClusterEdge(row, col, side, edgeType)]
 
     """
     find the representative element of the disjoint set containing this tile cluster
@@ -601,17 +723,17 @@ class Cluster:
             return
         
         #get the edge types out because they will be used a lot and are long
-        edge1 = tile1._tile.get_edge_type_on_side(side)
-        edge2 = tile2._tile.get_edge_type_on_side(Side.opposite(side))
+        edgeType1 = tile1._tile.get_edge_type_on_side(side)
+        edgeType2 = tile2._tile.get_edge_type_on_side(Side.opposite(side))
         
         #now find the element of the frontier of each of them
         #there is only an element on the frontier if it's not a blank edge
         #these may not be defined, but they aren't used unless they are defined
         #there is an edge case when processing overpasses that this edge may have been added to another cluster
         #and removed from consideration, there is a check for that edge case as well
-        if edge1 != Edge.B and not (isOverpass2 and edge2 == Edge.B):
+        if edgeType1 != EdgeType.B and not (isOverpass2 and edgeType2 == EdgeType.B):
             frontierEdge1 = representative1._find_in_frontier(tile1._row, tile1._col, side)
-        if edge2 != Edge.B and not (isOverpass1 and edge1 == Edge.B):
+        if edgeType2 != EdgeType.B and not (isOverpass1 and edgeType1 == EdgeType.B):
             frontierEdge2 = representative2._find_in_frontier(tile2._row, tile2._col, Side.opposite(side))
         
         #consider the cases with two blank clusters, they will get joined together
@@ -622,28 +744,28 @@ class Cluster:
         elif representative1._blank_cluster and not representative2._blank_cluster:
             #if there is an edge leading into the blank cluster though, add it
             #this allows us to detect detached squares
-            if edge2 != Edge.B:
+            if edgeType2 != EdgeType.B:
                 representative1._frontier += [frontierEdge2]
         elif representative2._blank_cluster and not representative1._blank_cluster:
-            if edge1 != Edge.B:
+            if edgeType1 != EdgeType.B:
                 representative2._frontier += [frontierEdge1]
         #at this point in the chain, they are both not blank clusters
         #if they are the same we will be joining the clusters together, remove the edges that joined them together
-        elif (edge1 == Edge.H and edge2 == Edge.H) or (edge1 == Edge.R and edge2 == Edge.R):
+        elif (edgeType1 == EdgeType.H and edgeType2 == EdgeType.H) or (edgeType1 == EdgeType.R and edgeType2 == EdgeType.R):
             representative1._remove_from_frontier(frontierEdge1)
             representative2._remove_from_frontier(frontierEdge2)
             Cluster._join_clusters(representative1, representative2)
         #if they have clashes, then this is a problem and raise an error to say that this board is invalid
-        elif (edge1 == Edge.H and edge2 == Edge.R) or (edge1 == Edge.R and edge2 == Edge.H):
+        elif (edgeType1 == EdgeType.H and edgeType2 == EdgeType.R) or (edgeType1 == EdgeType.R and edgeType2 == EdgeType.H):
             raise ValueError("board invalid - clash between ({0},{1}) and ({2},{3})".format(
                     tile1._row, tile1._col, tile2._row, tile2._col))
         #if we have a non-blank running into a blank (but neither are blank clusters), remove the side running into the
         #blank from the cluster, because we won't ever be able to join to it, this is a -1 point, but we are only
         #interested in point changes
         #don't do this for overpass segments, because there is 'another' tile there
-        elif edge1 == Edge.B and not isOverpass1 and edge2 != Edge.B:
+        elif edgeType1 == EdgeType.B and not isOverpass1 and edgeType2 != EdgeType.B:
             representative2._remove_from_frontier(frontierEdge2)
-        elif edge2 == Edge.B and not isOverpass2 and edge1 != Edge.B:
+        elif edgeType2 == EdgeType.B and not isOverpass2 and edgeType1 != EdgeType.B:
             representative1._remove_from_frontier(frontierEdge1)
             
             
@@ -687,6 +809,56 @@ class Cluster:
         
 
 """
+class containing information about all the possible moves from a given set of pieces
+"""
+class Moves:
+    
+    """
+    Constructor.
+    Takes the given pieces and creates all the necessary data structures for accesses to this class
+    """
+    def __init__(self, pieces, used_specials):
+        self._pieces = []
+        self._piece_count = {}
+        self._variations = {}
+        self._all_possible_moves = []
+        #add unique pieces to the list of pieces and keep a count of how many of each there are
+        for piece in pieces:
+            if piece not in self._piece_count:
+                self._pieces += [piece]
+                self._piece_count[piece] = 1
+                variations = Tile.get_variations(piece)
+                self._variations[piece] = variations
+                self._all_possible_moves += variations
+            else:
+                self._piece_count[piece] += 1
+              
+        #determine all the possible special piece placements
+        if len(used_specials) < NUM_SPECIALS:
+            self._pieces += [Piece.SPECIAL]
+            self._piece_count[Piece.SPECIAL] = 1
+            self._variations[Piece.SPECIAL]  = []
+            for piece in SPECIAL_PIECES:
+                if piece not in used_specials:
+                    self._variations[Piece.SPECIAL] += Tile.get_variations(piece)
+                
+            #add these to the all possible moves list
+            self._all_possible_moves += self._variations[Piece.SPECIAL]
+
+    def get_pieces(self):
+        return self._pieces
+    
+    def get_variations(self, piece):
+        return self._variations[piece]
+    
+    def get_piece_count(self, piece):
+        return self._piece_count[piece]
+    
+    def get_all_possible_moves(self):
+        return self._all_possible_moves
+
+
+"""
 create the board for the game shown in the rulebook
 """
 def rulebook_game():
@@ -719,16 +891,25 @@ def rulebook_game():
     board.add_tile(6, 5, Piece.CORNER_STATION, Rotation.R270, flip=False)
     return board
 
+"""
+the pieces available on the last turn of the default game, pass it the board for the specials
+"""
+def rulebook_moves(board):
+    return Moves([Piece.RAILWAY_STRAIGHT, Piece.OVERPASS, Piece.RAILWAY_CORNER, Piece.HIGHWAY_STRAIGHT], 
+                 board.get_used_special_routes())
+
 if __name__ == "__main__":
 
     board = rulebook_game()
     #board.fancy_board_print(show_free_squares=True)
-    """
+
     clusters = board.find_clusters()
     for cluster in clusters:
-        print(cluster.get_start_count())
-        print(cluster.get_cluster_tiles())
+        #print(cluster.get_start_count())
+        #print(cluster.get_cluster_tiles())
         print(cluster.get_frontier())
-    print(board.get_used_special_routes())
-    """
-    print(Tile.get_variations(Piece.CORNER_STATION))
+    #print(board.get_used_special_routes())
+    
+    #print(board.get_free_squares())
+    #print(board._get_cluster_representatives)
+    
