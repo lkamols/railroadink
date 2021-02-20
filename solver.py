@@ -30,7 +30,9 @@ class LastMoveSolver:
         print(internal_edges)
         
         #x variables are for whether move m is made at square s
-        X = {(t,s) : m.addVar(vtype=GRB.INTEGER) for t in T for s in S if self._is_placement_possible(t, s, cluster_ends)}
+        X = {(t,s) : m.addVar(vtype=GRB.BINARY) for t in T for s in S if self._is_placement_possible(t, s, cluster_ends)}
+        #d variables are for errors on internal edges
+        D = {(e,c) : m.addVar(vtype=GRB.BINARY) for e in internal_edges for c in range(2)}
         
         #constraints
         
@@ -45,7 +47,7 @@ class LastMoveSolver:
             m.addConstr(quicksum(X[t,s] for t in T if (t,s) in X) <= 1)
             for s in S}
             
-        edge_constraints = self._clashes_on_edge_constraints(m, T, X, internal_edges) 
+        edge_constraints, edge_error_constraints = self._clashes_on_edge_constraints(m, T, X, D, internal_edges) 
         
         #add constraints and variables for the paths joining clusters together and whether clusters are being joined together
         YC, YP, path_constraints, join_constraints = self._cluster_path_constraints(m, C, paths, T, S, X)
@@ -63,13 +65,14 @@ class LastMoveSolver:
         m.setObjective(quicksum(4 *YC[a] for a in YC) #cluster joins
                         + quicksum(X[t,s] for s in S if Board.is_centre_square(s) for t in T if (t,s) in X) #centre square uses
                         + quicksum(X[t,s] * self._board.placement_score(s, t) for t in T for s in S if (t,s) in X) #static error count
+                        - quicksum(D[a] for a in D) #internal error count
                 , GRB.MAXIMIZE)
     
             
         #optimize
         m.optimize()
         
-        self._print_result(m, X, YC, YP, T, S)
+        self._print_result(m, X, D, YC, YP, T, S)
        
     """
     determine if a given placement of a tile at a square clashes with any cluster ends
@@ -94,8 +97,9 @@ class LastMoveSolver:
     creates all the constraints relating to clashes on internal edges, adds constraints preventing railways and highways
     running into each other
     """
-    def _clashes_on_edge_constraints(self, m, T, X, internal_edges):
-        edge_constraints = {}
+    def _clashes_on_edge_constraints(self, m, T, X, D, internal_edges):
+        edge_constraints = {} #constraints preventing pieces being positioned that directly clash with each other
+        edge_error_constraints = {} #constraints for the 
         for edge in internal_edges:
             if edge.is_vertical():
                 sLeft = (edge.get_row(), edge.get_col() - 1)
@@ -106,6 +110,13 @@ class LastMoveSolver:
                 #similarly there can only be a railway on the left OR a highway on the right
                 edge_constraints[edge, "R"] = m.addConstr(quicksum(X[t,sLeft] for t in T if (t, sLeft) in X and t.get_edge_type_on_side(Side.RIGHT) == EdgeType.R) +
                                 quicksum(X[t, sRight] for t in T if (t, sRight) in X and t.get_edge_type_on_side(Side.LEFT) == EdgeType.H) <= 1)
+                #now for the internal errors constraints
+                #something on the left, nothing on the right
+                edge_error_constraints[edge, 0] = m.addConstr(quicksum(X[t,sLeft] for t in T if (t, sLeft) in X and t.get_edge_type_on_side(Side.RIGHT) != EdgeType.B) -
+                                quicksum(X[t, sRight] for t in T if (t, sRight) in X and t.get_edge_type_on_side(Side.LEFT) != EdgeType.B) <= D[edge, 0])
+                #something on the right, nothing on the left
+                edge_error_constraints[edge, 1] = m.addConstr(quicksum(X[t, sRight] for t in T if (t, sRight) in X and t.get_edge_type_on_side(Side.LEFT) != EdgeType.B) - 
+                                      quicksum(X[t,sLeft] for t in T if (t, sLeft) in X and t.get_edge_type_on_side(Side.RIGHT) != EdgeType.B) <= D[edge, 1])
             else: #horizontal
                 sTop = (edge.get_row() - 1, edge.get_col())
                 sBottom = (edge.get_row(), edge.get_col())
@@ -115,7 +126,14 @@ class LastMoveSolver:
                 #similarly, railway top OR highway bottom
                 edge_constraints[edge, "H"] = m.addConstr(quicksum(X[t,sTop] for t in T if (t, sTop) in X and t.get_edge_type_on_side(Side.BOTTOM) == EdgeType.R) +
                                 quicksum(X[t, sBottom] for t in T if (t, sBottom) in X and t.get_edge_type_on_side(Side.TOP) == EdgeType.H) <= 1)
-        return edge_constraints
+                #now for the internal errors constraints
+                #something on the top, nothing on the bottom
+                edge_error_constraints[edge, 0] = m.addConstr(quicksum(X[t,sTop] for t in T if (t, sTop) in X and t.get_edge_type_on_side(Side.BOTTOM) != EdgeType.B) -
+                                      quicksum(X[t, sBottom] for t in T if (t, sBottom) in X and t.get_edge_type_on_side(Side.TOP) != EdgeType.B) <= D[edge, 0])
+                #something on the bottom, nothing on the top
+                edge_error_constraints[edge, 1] = m.addConstr(quicksum(X[t, sBottom] for t in T if (t, sBottom) in X and t.get_edge_type_on_side(Side.TOP) != EdgeType.B) -
+                                      quicksum(X[t,sTop] for t in T if (t, sTop) in X and t.get_edge_type_on_side(Side.BOTTOM) != EdgeType.B) <= D[edge, 1])
+        return edge_constraints, edge_error_constraints
     
     """
     creates all the contraints for the cluster paths
@@ -131,9 +149,9 @@ class LastMoveSolver:
                 if start_id < finish_id:
                     joining_paths = paths.get((start_id, finish_id), [])
                     if len(joining_paths) > 0:
-                        YC[start_id, finish_id] = m.addVar(vtype=GRB.INTEGER)
+                        YC[start_id, finish_id] = m.addVar(vtype=GRB.BINARY)
                         for count, path in enumerate(joining_paths):
-                            YP[start_id, finish_id, count] = m.addVar(vtype=GRB.INTEGER)
+                            YP[start_id, finish_id, count] = m.addVar(vtype=GRB.BINARY)
                             #the colossus of all constraints, if this path exists in the board, then allow this variable to be 1
                             #since we have the constraint that only one piece can go in each square, this can just be done by ensuring
                             #one valid piece is placed at each step along the way
@@ -153,7 +171,7 @@ class LastMoveSolver:
     """
     print the board with the solution attached
     """
-    def _print_result(self, m, X, YC, YP, T, S):
+    def _print_result(self, m, X, D, YC, YP, T, S):
         #find all the pieces and placements that we had and add them to the board
         for t, s in X:
             if X[t,s].x > 0.9:
@@ -177,12 +195,18 @@ class LastMoveSolver:
                 sum(X[t,s].x for s in S if Board.is_centre_square(s) for t in T if (t,s) in X )))
         print("\t",[s for s in S if Board.is_centre_square(s) for t in T if (t,s) in X and X[t,s].x > 0.9])
         
-        print("{0:.0f} point(s) attributed in changes to static errors".format( 
+        print("{0:.0f} point(s) attributed to static errors".format( 
               sum(X[t,s].x * self._board.placement_score(s, t) for t in T for s in S if (t,s) in X)))
         for t in T:
             for s in S:
                 if (t,s) in X and X[t,s].x > 0.9:
                     print("\t",self._board.placement_score(s, t), "point(s) at", s)
+                    
+        print("-{0:.0f} point(s) attributed to internal errors".format(
+                sum(D[a].x for a in D)))
+        for edge, c in D:
+            if (D[edge,c].x > 0.9):
+                print("\t{0}".format(edge))
     
     
 if __name__ == "__main__":
