@@ -89,6 +89,8 @@ class LastMoveSolver:
                         for count, path in enumerate(joining_paths):
                             YP[start_id, finish_id, count] = m.addVar(vtype=GRB.INTEGER)
                             #the colossus of all constraints, if this path exists in the board, then allow this variable to be 1
+                            #since we have the constraint that only one piece can go in each square, this can just be done by ensuring
+                            #one valid piece is placed at each step along the way
                             path_constraints[start_id, finish_id, count] = \
                                     m.addConstr(quicksum(X[t,(path[i][0], path[i][1])] for i in range(1, len(path)) for t in T
                                                            if (t, (path[i][0], path[i][1])) in X 
@@ -138,6 +140,13 @@ class LastMoveSolver:
         edge_constraints = self._clashes_on_edge_constraints(m, T, X, internal_edges) 
         
         YC, YP, path_constraints, join_constraints = self._cluster_path_constraints(m, C, paths, T, S, X)
+        self._YC, self._YP = YC, YP
+        
+        single_join_constraints = {(other_id, start_id, finish_id) :
+            m.addConstr(YC[start_id, finish_id] <= 2 - YC[other_id, start_id] - YC[other_id, finish_id])
+            for other_id in C for start_id in C for finish_id in C 
+            if other_id < start_id and start_id < finish_id and 
+            (other_id, start_id) in YC and (other_id, finish_id) in YC and (start_id, finish_id) in YC}
         
         m.setObjective(quicksum(YC[a] for a in YC), GRB.MAXIMIZE)
     
@@ -154,6 +163,10 @@ class LastMoveSolver:
             if self._X[t,s].x > 0.9:
                 self._board.add_solution_tile(s[0], s[1], t)
         self._board.fancy_board_print()
+        
+        for a in self._YC:
+            if self._YC[a].x > 0.9:
+                print(a)
     
     
 if __name__ == "__main__":
