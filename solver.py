@@ -70,6 +70,39 @@ class LastMoveSolver:
                 edge_constraints[edge, "H"] = m.addConstr(quicksum(X[t,sTop] for t in T if (t, sTop) in X and t.get_edge_type_on_side(Side.BOTTOM) == EdgeType.R) +
                                 quicksum(X[t, sBottom] for t in T if (t, sBottom) in X and t.get_edge_type_on_side(Side.TOP) == EdgeType.H) <= 1)
         return edge_constraints
+    
+    """
+    creates all the contraints for the cluster paths
+    """
+    def _cluster_path_constraints(self, m, C, paths, T, S, X):
+        YC = {} #variables for the joining of clusters together
+        YP = {} #variables for paths being 
+        path_constraints = {}
+        join_constraints = {}
+        for start_id in C:
+            for finish_id in C:
+                #only have the start_id less than the finish_id to keep things one directional
+                if start_id < finish_id:
+                    joining_paths = paths.get((start_id, finish_id), [])
+                    if len(joining_paths) > 0:
+                        YC[start_id, finish_id] = m.addVar(vtype=GRB.INTEGER)
+                        for count, path in enumerate(joining_paths):
+                            YP[start_id, finish_id, count] = m.addVar(vtype=GRB.INTEGER)
+                            #the colossus of all constraints, if this path exists in the board, then allow this variable to be 1
+                            path_constraints[start_id, finish_id, count] = \
+                                    m.addConstr(quicksum(X[t,(path[i][0], path[i][1])] for i in range(1, len(path)) for t in T
+                                                           if (t, (path[i][0], path[i][1])) in X 
+                                                           and t.get_edge_type_on_side(path[i][2]) != EdgeType.B
+                                                           and t.get_edge_type_on_side(Side.opposite(path[i-1][2])) != EdgeType.B) >=
+                                                (len(path) - 1) * YP[start_id, finish_id, count])
+
+                        #then if any of these paths variables are 1, the variable for joining the two clusters together can be made 1
+                        join_constraints[start_id, finish_id] = m.addConstr(YC[start_id, finish_id] <= 
+                                                quicksum(YP[start_id, finish_id, count] for count in range(len(joining_paths))))    
+        return YC, YP, path_constraints, join_constraints
+                            
+                            
+                    
                 
     """
     construct the model used to solve the last move railroad ink problem
@@ -82,6 +115,7 @@ class LastMoveSolver:
         T = self._moves.get_all_possible_moves()
         cluster_ends = self._board.get_all_cluster_ends()
         internal_edges = self._board.get_available_internal_edges()
+        C, paths = self._board.get_cluster_paths()
         print(internal_edges)
         
         #x variables are for whether move m is made at square s
@@ -102,6 +136,11 @@ class LastMoveSolver:
             for s in S}
             
         edge_constraints = self._clashes_on_edge_constraints(m, T, X, internal_edges) 
+        
+        YC, YP, path_constraints, join_constraints = self._cluster_path_constraints(m, C, paths, T, S, X)
+        
+        m.setObjective(quicksum(YC[a] for a in YC), GRB.MAXIMIZE)
+    
             
         return m
     

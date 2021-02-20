@@ -634,6 +634,8 @@ class Board:
     
     """
     get all the paths between clusters
+    returns a list of all cluster identifiers and a dictionary of all the paths between the pairs.
+    Note that the pairs are only found in pairs that increase e.g defined for (1,2) not (2,1)
     """
     def get_cluster_paths(self):
         #check if the clusters are up to date and if not, update them
@@ -661,11 +663,19 @@ class Board:
                 
         #next determine all the paths from each start location
         free_square_set = set(self.get_free_squares()) #lots of lookups, make a set
+        paths = {}
         for c_id in cluster_identifiers:
             cluster = identifier_to_cluster[c_id]
             for clusterEdge in cluster.get_frontier():
-                paths = self._path_dfs(c_id, [(clusterEdge.row, clusterEdge.col, clusterEdge.side)], edges, free_square_set)
-                print(c_id, paths)
+                #use a DFS to find all paths leaving from this cluster edge and running into other clusters
+                edgePaths = self._path_dfs(c_id, [(clusterEdge.row, clusterEdge.col, clusterEdge.side)], edges, free_square_set)
+                #go through all found paths and add them to the full collection
+                for finish_id, path in edgePaths:
+                    #if there are no paths currently found between these two clusters, add them
+                    if paths.get((c_id, finish_id)) == None:
+                        paths[c_id, finish_id] = []
+                    paths[c_id, finish_id] += [path]
+        return cluster_identifiers, paths
         
        
     """
@@ -688,6 +698,7 @@ class Board:
     use DFS to determine all the paths that continue from a location and run into a cluster edge
     of a cluster different to the cluster with the start_cluster_id
     path is a list of (row, col, Side) tuples tracing the path
+    returns a list of (id, path) tuples with the end cluster id and the path taken to get there
     """       
     def _path_dfs(self, start_cluster_id, path, edges, free_square_set):
         #get the last edge
@@ -707,6 +718,11 @@ class Board:
         #another base case is if we have gone too far
         if len(path) >= 6: #MAGIC NUMBER, REMOVE LATER
             return [] #there are no paths to return
+        
+        #check we aren't retracing at all
+        for r, c, s in path:
+            if row == r and col == c:
+                return []
         
         #can only continue if the square is a free set
         if (row, col) in free_square_set:
