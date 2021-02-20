@@ -19,11 +19,57 @@ class LastMoveSolver:
     create and solve an IP that gives the solution to the railroad ink problem
     """
     def solve(self):
-        m = self._make_model()
+        m = Model("railroad-ink")
         
+        #sets
+        S = self._board.get_free_squares()
+        T = self._moves.get_all_possible_moves()
+        cluster_ends = self._board.get_all_cluster_ends()
+        internal_edges = self._board.get_available_internal_edges()
+        C, paths = self._board.get_cluster_paths()
+        print(internal_edges)
+        
+        #x variables are for whether move m is made at square s
+        X = {(t,s) : m.addVar(vtype=GRB.INTEGER) for t in T for s in S if self._is_placement_possible(t, s, cluster_ends)}
+        
+        #constraints
+        
+        #use all of the pieces required to be used
+        use_pieces = {p : 
+            m.addConstr(quicksum(X[t,s] for t in self._moves.get_variations(p) for s in S if (t,s) in X) == 
+                        self._moves.get_piece_count(p))
+            for p in self._moves.get_pieces()}
+            
+        #only place one tile in each square
+        one_tile_per_square = {s :
+            m.addConstr(quicksum(X[t,s] for t in T if (t,s) in X) <= 1)
+            for s in S}
+            
+        edge_constraints = self._clashes_on_edge_constraints(m, T, X, internal_edges) 
+        
+        #add constraints and variables for the paths joining clusters together and whether clusters are being joined together
+        YC, YP, path_constraints, join_constraints = self._cluster_path_constraints(m, C, paths, T, S, X)
+        
+        #set a constraint so that two clusters can only be joined IFF there isn't a previous cluster which joins
+        #to both of them, prevents a join of (a,b,c) counted 3 times as a-b a-c and b-c
+        single_join_constraints = {(other_id, start_id, finish_id) :
+            m.addConstr(YC[start_id, finish_id] <= 2 - YC[other_id, start_id] - YC[other_id, finish_id])
+            for other_id in C for start_id in C for finish_id in C 
+            if other_id < start_id and start_id < finish_id and 
+            (other_id, start_id) in YC and (other_id, finish_id) in YC and (start_id, finish_id) in YC}
+        
+            
+        #set the objective function
+        m.setObjective(quicksum(4 *YC[a] for a in YC) #cluster joins
+                        + quicksum(X[t,s] for s in S if Board.is_centre_square(s) for t in T if (t,s) in X) #centre square uses
+                        + quicksum(X[t,s] * self._board.placement_score(s, t) for t in T for s in S if (t,s) in X) #static error count
+                , GRB.MAXIMIZE)
+    
+            
+        #optimize
         m.optimize()
         
-        self._print_result(m)
+        self._print_result(m, X, YC, YP, T, S)
        
     """
     determine if a given placement of a tile at a square clashes with any cluster ends
@@ -102,71 +148,41 @@ class LastMoveSolver:
                         join_constraints[start_id, finish_id] = m.addConstr(YC[start_id, finish_id] <= 
                                                 quicksum(YP[start_id, finish_id, count] for count in range(len(joining_paths))))    
         return YC, YP, path_constraints, join_constraints
-                            
-                            
-                    
-                
-    """
-    construct the model used to solve the last move railroad ink problem
-    """    
-    def _make_model(self):
-        m = Model("railroad-ink")
-        
-        #sets
-        S = self._board.get_free_squares()
-        T = self._moves.get_all_possible_moves()
-        cluster_ends = self._board.get_all_cluster_ends()
-        internal_edges = self._board.get_available_internal_edges()
-        C, paths = self._board.get_cluster_paths()
-        print(internal_edges)
-        
-        #x variables are for whether move m is made at square s
-        X = {(t,s) : m.addVar(vtype=GRB.INTEGER) for t in T for s in S if self._is_placement_possible(t, s, cluster_ends)}
-        self._X = X #just store this to the class to get results from
-        
-        #constraints
-        
-        #use all of the pieces required to be used
-        use_pieces = {p : 
-            m.addConstr(quicksum(X[t,s] for t in self._moves.get_variations(p) for s in S if (t,s) in X) == 
-                        self._moves.get_piece_count(p))
-            for p in self._moves.get_pieces()}
-            
-        #only place one tile in each square
-        one_tile_per_square = {s :
-            m.addConstr(quicksum(X[t,s] for t in T if (t,s) in X) <= 1)
-            for s in S}
-            
-        edge_constraints = self._clashes_on_edge_constraints(m, T, X, internal_edges) 
-        
-        YC, YP, path_constraints, join_constraints = self._cluster_path_constraints(m, C, paths, T, S, X)
-        self._YC, self._YP = YC, YP
-        
-        single_join_constraints = {(other_id, start_id, finish_id) :
-            m.addConstr(YC[start_id, finish_id] <= 2 - YC[other_id, start_id] - YC[other_id, finish_id])
-            for other_id in C for start_id in C for finish_id in C 
-            if other_id < start_id and start_id < finish_id and 
-            (other_id, start_id) in YC and (other_id, finish_id) in YC and (start_id, finish_id) in YC}
-        
-        m.setObjective(quicksum(YC[a] for a in YC), GRB.MAXIMIZE)
-    
-            
-        return m
     
     
     """
     print the board with the solution attached
     """
-    def _print_result(self, m):
+    def _print_result(self, m, X, YC, YP, T, S):
         #find all the pieces and placements that we had and add them to the board
-        for t, s in self._X:
-            if self._X[t,s].x > 0.9:
+        for t, s in X:
+            if X[t,s].x > 0.9:
                 self._board.add_solution_tile(s[0], s[1], t)
+        #then do a super fancy board print showing the exact solution
         self._board.fancy_board_print()
         
-        for a in self._YC:
-            if self._YC[a].x > 0.9:
-                print(a)
+        #next print out the resulting score
+        print("The total points earned (in this turn) were: {0:.0f}\n".format(m.objVal))
+        
+        #print out the information about the clusters which were joined together
+        print("{0:.0f} point(s) were earned from joining cluster, the clusters joined were:".format( 4 * sum(YC[a].x for a in YC)))
+        for start_id, finish_id in YC:
+            if YC[start_id, finish_id].x > 0.9:
+                start_row, start_col = Cluster.recover_from_identifier(start_id)
+                end_row, end_col = Cluster.recover_from_identifier(finish_id)
+                print("\t({0},{1}) - ({2},{3})".format(start_row, start_col, end_row, end_col))
+          
+        #print information about the centre squares
+        print("{0:.0f} point(s) were earned from centre squares:".format(
+                sum(X[t,s].x for s in S if Board.is_centre_square(s) for t in T if (t,s) in X )))
+        print("\t",[s for s in S if Board.is_centre_square(s) for t in T if (t,s) in X and X[t,s].x > 0.9])
+        
+        print("{0:.0f} point(s) attributed in changes to static errors".format( 
+              sum(X[t,s].x * self._board.placement_score(s, t) for t in T for s in S if (t,s) in X)))
+        for t in T:
+            for s in S:
+                if (t,s) in X and X[t,s].x > 0.9:
+                    print("\t",self._board.placement_score(s, t), "point(s) at", s)
     
     
 if __name__ == "__main__":

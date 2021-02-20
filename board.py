@@ -16,9 +16,6 @@ SQUARE_HEIGHT = BOARD_HEIGHT//NUM_ROWS
 
 PHOTOS_FOLDER = "Railroad-Pictures/"
 
-#some colours to use
-RGB_GREEN = (11, 102, 35)
-
 """
 Enum for the types of edges that can be on a piece
 """
@@ -388,7 +385,7 @@ class Board:
         self._special_routes = [] #the special routes that have been used
         self._cluster_reps = None
         self._clusters_up_to_date = False #keeps track of whether the currently stored clusters are up to date
-        self._solution_locations = []
+        self._solution_tiles = []
       
     """
     add a tile to the board
@@ -403,11 +400,7 @@ class Board:
     add a solution tile to the board, treated like a normal tile, but will be printed with a light green overlay
     """
     def add_solution_tile(self, row, col, tile):
-        self._board[row][col] = tile
-        if tile.get_piece() in SPECIAL_PIECES:
-            self._special_routes += [tile.get_piece()]
-        self._clusters_up_to_date = False
-        self._solution_locations += [(row, col)]
+        self._solution_tiles += [(row, col, tile)]
         
     """
     add a start tile to the board, these are the pieces around the edge
@@ -451,8 +444,10 @@ class Board:
                 im.paste(square_im, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS + SQUARE_WIDTH//4, 
                                      TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS + SQUARE_HEIGHT//4))
         
-        
-        for row, col in self._solution_locations:
+        #add the solution tiles
+        for row, col, tile in self._solution_tiles:
+            piece_image = tile.get_image()
+            im.paste(piece_image, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
             solution_overlay = Image.new("RGB", (SQUARE_WIDTH//4, SQUARE_HEIGHT//4), color="blue")
             im.paste(solution_overlay, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, 
                                         TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
@@ -682,7 +677,8 @@ class Board:
     given a row, col and side, returns a (row, col, side) tuple that is the other side of the same edge.
     e.g (0,0,RIGHT) shares an edge with (0,1,LEFT)
     """
-    def opposite_edge(self, row, col, side):
+    @staticmethod
+    def opposite_edge(row, col, side):
         if side == Side.TOP:
             return row - 1, col, Side.BOTTOM
         elif side == Side.RIGHT:
@@ -704,7 +700,7 @@ class Board:
         #get the last edge
         last_edge = path[-1]
         #translate this to the other side of the edge, which is where the next piece must go
-        row, col, side = self.opposite_edge(last_edge[0], last_edge[1], last_edge[2])
+        row, col, side = Board.opposite_edge(last_edge[0], last_edge[1], last_edge[2])
         
         #if this opposite edge is a cluster edge, we have a valid path and we can stop here
         opposite_edge_id = edges.get((row, col, side))
@@ -733,7 +729,47 @@ class Board:
             return paths
         else: #this is not a square that we can continue on
             return []
-            
+     
+    """
+    determines the static score associated with placing the given tile at (row, col)
+    -1 for any rail/highway that runs into an occupied square with a blank side
+    +1 for any placement that connects to a rail/highway on another piece that isn't a start highway or railway
+    Assumes that the given placement is valid and square is a (row, col) pair
+    """
+    def placement_score(self, square, tile):
+        score = 0 #initialise the score to zero and then score going around the different sides
+        row, col = square
+        for side in Side:
+            #we can only gain or lose points on edges that aren't blank
+            if tile.get_edge_type_on_side(side) != EdgeType.B:
+                #get the opposite side of the edge and the tile that is there
+                opp_row, opp_col, opp_side = Board.opposite_edge(row, col, side)
+                #check if we are in the board, if the opposite edge is outside the board, it doesn't matter what we connect to it
+                #this applies if it is a start edge or not
+                if opp_row >= 0 and opp_row < NUM_ROWS and opp_col >= 0 and opp_col < NUM_COLS:
+                    opp_tile = self._board[opp_row][opp_col]
+                    #then if this other piece is not blank, check what is on the other side
+                    #if it is blank, then this will be a dynamic placement score not a static score, so ignore
+                    if opp_tile.get_piece() != Piece.BLANK:
+                        opp_edge_type = opp_tile.get_edge_type_on_side(opp_side)
+                        if opp_edge_type == EdgeType.B:
+                            #if we have a non blank edge and its running into a blank edge, that will end in an error
+                            score -= 1 
+                        else:
+                            #well we know this is a valid placement by our assumption, so as long as what we are connecting
+                            #to is not one of the start edges (which we know it isn't from a previous check), we are removing 
+                            #a hanging error from the board (maybe moving it but that is the dynamic errors problem)
+                            score += 1
+        #return the score
+        return score
+    
+    """
+    returns whether a square is one of the centre squares
+    s is a square, i.e a (row, col) tuple
+    """
+    @staticmethod
+    def is_centre_square(s):
+        return (s[0] >= 2 and s[0] <= 4 and s[1] >= 2 and s[1] <= 4)
      
     #GETTER METHODS
                                         
@@ -932,7 +968,15 @@ class Cluster:
     get an identifier for the cluster, this will be a unique number for each cluster
     """
     def get_identifier(self):
-        return 100 * self._tile.get_piece().value + 8*self._row + self._col
+        return 200 * self._tile.get_piece().value + 10*self._row + self._col
+    
+    """
+    recover the position of the piece from the identifier
+    """
+    @staticmethod
+    def recover_from_identifier(idtfr):
+        return (idtfr + 10) % 200 // 10 - 1, (idtfr + 1) % 200 % 10 - 1
+        
         
 
 """
@@ -1028,7 +1072,7 @@ def rulebook_moves(board):
 if __name__ == "__main__":
 
     board = rulebook_game()
-    #board.fancy_board_print(show_free_squares=True)
+    board.fancy_board_print(show_free_squares=True)
 
     #clusters = board.find_clusters()
     #for cluster in clusters:
@@ -1040,5 +1084,5 @@ if __name__ == "__main__":
     #print(board.get_free_squares())
     #print(board._get_cluster_representatives)
     
-    board.get_cluster_paths()
+    #board.get_cluster_paths()
     
