@@ -155,11 +155,13 @@ class LastMoveSolver:
                             #the colossus of all constraints, if this path exists in the board, then allow this variable to be 1
                             #since we have the constraint that only one piece can go in each square, this can just be done by ensuring
                             #one valid piece is placed at each step along the way
+                            #need to ensure we aren't turning a corner with an overpass though
                             path_constraints[start_id, finish_id, count] = \
                                     m.addConstr(quicksum(X[t,(path[i][0], path[i][1])] for i in range(1, len(path)) for t in T
                                                            if (t, (path[i][0], path[i][1])) in X 
                                                            and t.get_edge_type_on_side(path[i][2]) != EdgeType.B
-                                                           and t.get_edge_type_on_side(Side.opposite(path[i-1][2])) != EdgeType.B) >=
+                                                           and t.get_edge_type_on_side(Side.opposite(path[i-1][2])) != EdgeType.B
+                                                           and not (t.get_piece() == Piece.OVERPASS and path[i][2] != path[i-1][2])) >=
                                                 (len(path) - 1) * YP[start_id, finish_id, count])
 
                         #then if any of these paths variables are 1, the variable for joining the two clusters together can be made 1
