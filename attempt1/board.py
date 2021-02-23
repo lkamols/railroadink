@@ -397,7 +397,7 @@ class Board:
         self._clusters_up_to_date = False #if any tiles are added, the clustering is invalid
         
     """
-    add a solution tile to the board, treated like a normal tile, but will be printed with a light green overlay
+    add a solution tile to the board, treated like a normal tile, but will be printed with an indicator
     """
     def add_solution_tile(self, row, col, tile):
         self._solution_tiles += [(row, col, tile)]
