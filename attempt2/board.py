@@ -419,6 +419,9 @@ class Board:
     def is_square_free(self, s):
         return self.get_piece_at(s) == Piece.BLANK
     
+    def get_start_pieces(self):
+        return self._start_tiles
+    
 
 """
 create the board for the game shown in the rulebook

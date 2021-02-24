@@ -62,12 +62,26 @@ class LastMoveSolver:
                         <= 1)
             for s in S if s[1] < NUM_ROWS - 1 for e in [EdgeType.H, EdgeType.R]}
             
-        
+            
+        #ensure no illegal pieces are placed on start edges
+        no_illegal_start_joins = {}
+        for startR, startC, tile in self._board.get_start_pieces():
+            for startSide in Side:
+                #get the side of the start tile that isn't blank
+                startType = tile.get_edge_type_on_side(startSide)
+                if startType != EdgeType.B:
+                    r, c, side = Board.opposite_edge(startR, startC, startSide)
+                    no_illegal_start_joins[startR, startC] = m.addConstr(
+                            quicksum(X[t, (r,c)] for t in T if t.get_edge_type_on_side(side) == EdgeType.clash_type(startType))
+                            == 0)
+                    
             
         #ensure all the pieces that are part of the board are kept
         default_placements = {s :
             m.addConstr(X[self._board.get_tile_at(s),s] == 1)
             for s in S if not self._board.is_square_free(s)}
+            
+
 
         #use all of the pieces required to be used
         use_pieces = {p : 
