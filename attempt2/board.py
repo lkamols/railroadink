@@ -5,6 +5,7 @@ from PIL import Image
 NUM_ROWS = 7
 NUM_COLS = 7
 NUM_SPECIALS = 3
+NUM_STARTS = 12
 
 #photo measurements to get the positioning correct
 TOP_OFFSET = 44
@@ -187,6 +188,8 @@ class Tile:
         Piece.RAILWAY_JUNCTION: (1, False),
         Piece.CORNER_JUNCTION: (4, False),
         Piece.CROSS_JUNCTION: (2, False),  
+        Piece.START_HIGHWAY: (4,False),
+        Piece.START_RAILWAY: (4,False)
     }
     
     """
@@ -266,7 +269,7 @@ class Tile:
     @staticmethod
     def get_all_variations():
         all_variations = []
-        for piece in POSSIBLE_MOVES:
+        for piece in POSSIBLE_MOVES + START_PIECES:
             all_variations += Tile.get_variations(piece)
         return all_variations
     
@@ -322,7 +325,10 @@ class Board:
     """
     def __init__(self):
         #create an empty board with no tiles in it yet
-        self._board = [[Tile(Piece.BLANK, Rotation.I)]*NUM_COLS for i in range(NUM_ROWS)]
+        self._board = {}
+        for row in range(NUM_ROWS):
+            for col in range(NUM_COLS):
+                self._board[row,col] = Tile(Piece.BLANK, Rotation.I)
         self._initialise_start_tiles()
         self._solution_tiles = []
       
@@ -330,7 +336,7 @@ class Board:
     add a tile to the board
     """
     def add_tile(self, row, col, piece, rotation, flip=False):
-        self._board[row][col] = Tile(piece, rotation, flip)
+        self._board[row,col] = Tile(piece, rotation, flip)
         
     """
     add a solution tile to the board, treated like a normal tile, but will be printed with an indicator
@@ -339,20 +345,14 @@ class Board:
         self._solution_tiles += [(row, col, tile)]
         
     """
-    add a start tile to the board, these are the pieces around the edge
-    """
-    def _add_start_tile(self, row, col, piece, rotation):
-        self._start_tiles += [(row, col, Tile(piece, rotation))]
-        
-    """
     initialise all the start pieces
     """
     def _initialise_start_tiles(self):
         self._start_tiles = []
         for row, col, rotation in RAILWAY_START_POSITIONS:
-            self._add_start_tile(row, col, Piece.START_RAILWAY, rotation)
+            self._board[row,col] = Tile(Piece.START_RAILWAY, rotation)
         for row, col, rotation in HIGHWAY_START_POSITIONS:
-            self._add_start_tile(row, col, Piece.START_HIGHWAY, rotation)
+            self._board[row,col] = Tile(Piece.START_HIGHWAY, rotation)
         
     """
     creates an image corresponding to the board,
@@ -366,8 +366,9 @@ class Board:
         #then go through each of the tiles and add them
         for row in range(NUM_ROWS):
             for col in range(NUM_COLS):
-                if self._board[row][col].get_piece() != Piece.BLANK:
-                    piece_image = self._board[row][col].get_image()
+                if self._board[row,col].get_piece() != Piece.BLANK:
+                    print(row,col)
+                    piece_image = self._board[row,col].get_image()
                     im.paste(piece_image, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
         
         #add the solution tiles
@@ -411,16 +412,17 @@ class Board:
         return (s[0] >= 2 and s[0] <= 4 and s[1] >= 2 and s[1] <= 4)
         
     def get_tile_at(self, s):
-        return self._board[s[0]][s[1]]
+        return self._board[s]
     
     def get_piece_at(self, s):
-        return self._board[s[0]][s[1]].get_piece()
+        return self._board[s].get_piece()
     
     def is_square_free(self, s):
         return self.get_piece_at(s) == Piece.BLANK
     
-    def get_start_pieces(self):
-        return self._start_tiles
+    @staticmethod
+    def get_start_squares():
+        return {(r,c) for r,c,t in HIGHWAY_START_POSITIONS + RAILWAY_START_POSITIONS}
     
 
 """
