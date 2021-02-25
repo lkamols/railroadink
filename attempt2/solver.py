@@ -26,6 +26,7 @@ class LastMoveSolver:
         O = Board.get_start_squares()
         S = I.union(O)
         T = Tile.get_all_variations()
+        E = [EdgeType.H, EdgeType.R]
         
         #x variables are for whether move m is made at square s
         X = {(t,s) : m.addVar(vtype=GRB.BINARY) for t in T for s in S}
@@ -34,6 +35,8 @@ class LastMoveSolver:
         Y = {(s,(s[0] + dr, s[1] + dc),e) : m.addVar(vtype=GRB.BINARY)
              for s in S for (dr, dc) in [(0,1),(1,0)] for e in [EdgeType.H, EdgeType.R]
              if (s[0] + dr, s[1] + dc) in S}
+        F = {((r,c),(r+dr,c+dc),e): m.addVar() for r in range(NUM_ROWS) for c in range(NUM_COLS) 
+                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)]}
         
         #constraints
         
@@ -42,29 +45,27 @@ class LastMoveSolver:
             m.addConstr(2 * Y[s, (s[0], s[1]+1), e] <= 
                               quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e) +
                               quicksum(X[t,(s[0],s[1]+1)] for t in T if t.get_edge_type_on_side(Side.LEFT) == e))
-            for s in S if (s[0],s[1]+1) in S for e in [EdgeType.H, EdgeType.R]}
+            for s in S if s[1] < NUM_COLS - 1 for e in E}
         
         #constraints for if there are connections on any vertical edges
         vertical_y_constraints = {(s,e) :
             m.addConstr(2 * Y[s, (s[0]+1, s[1]), e] <=
                               quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e) +
                               quicksum(X[t,(s[0]+1,s[1])] for t in T if t.get_edge_type_on_side(Side.TOP) == e))
-            for s in S if (s[0]+1,s[1]) in S for e in [EdgeType.H, EdgeType.R]}
+            for s in S if s[0] < NUM_ROWS - 1 for e in E}
           
         #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
         horizontal_clashes = {(s,e) :
             m.addConstr(quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e) +
                         quicksum(X[t,(s[0],s[1]+1)] for t in T 
                             if t.get_edge_type_on_side(Side.LEFT) == Side.opposite(e)) <= 1)
-            for s in S if (s[0],s[1]+1) in S for e in [EdgeType.H, EdgeType.R]}
+            for s in S if s[0] < NUM_COLS - 1 for e in E}
             
         #constraints for clashes on edges joining squares vertically, preventing railways & highways connecting
         vertical_clashes = {(s,e) :
             m.addConstr(quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e) +
                         quicksum(X[t,(s[0]+1,s[1])] for t in T if t.get_edge_type_on_side(Side.TOP) == Side.opposite(e))
-                        <= 1)
-            for s in S if (s[0]+1,s[1]) in S for e in [EdgeType.H, EdgeType.R]}
-            
+                        <= 1) for s in S if s[1] < NUM_ROWS - 1 for e in E}
             
         #ensure no illegal pieces are placed on start edges
 #        no_illegal_start_joins = {}
@@ -126,9 +127,9 @@ class LastMoveSolver:
             
         #optimize
         m.optimize()
-        
+
         self._print_result(m, X, T, S)
-    
+ 
     """
     print the board with the solution attached
     """
