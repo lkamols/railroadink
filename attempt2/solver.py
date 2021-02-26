@@ -32,11 +32,11 @@ class LastMoveSolver:
         X = {(t,s) : m.addVar(vtype=GRB.BINARY) for t in T for s in S}
         #y variables for whether there is a link between two adjacent squares with edge type e
         #note that these only go right and down (increasing row/col)
-        Y = {(s,(s[0] + dr, s[1] + dc),e) : m.addVar(vtype=GRB.BINARY)
-             for s in S for (dr, dc) in [(0,1),(1,0)] for e in [EdgeType.H, EdgeType.R]
-             if (s[0] + dr, s[1] + dc) in S}
-        F = {((r,c),(r+dr,c+dc),e): m.addVar() for r in range(NUM_ROWS) for c in range(NUM_COLS) 
-                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)]}
+        Y = {((r,c),(r+dr,c+dc),e) : m.addVar(vtype=GRB.BINARY)
+             for (r,c) in S for (dr, dc) in [(0,1),(1,0)] for e in E
+             if (r + dr, c + dc) in S}
+        F = {((r,c),(r+dr,c+dc),e): m.addVar() for r,c in S 
+                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr,c+dc) in S for e in E}
         
         #constraints
         
@@ -45,27 +45,27 @@ class LastMoveSolver:
             m.addConstr(2 * Y[s, (s[0], s[1]+1), e] <= 
                               quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e) +
                               quicksum(X[t,(s[0],s[1]+1)] for t in T if t.get_edge_type_on_side(Side.LEFT) == e))
-            for s in S if s[1] < NUM_COLS - 1 for e in E}
+            for s in S if (s[0],s[1]+1) in S for e in E}
         
         #constraints for if there are connections on any vertical edges
         vertical_y_constraints = {(s,e) :
             m.addConstr(2 * Y[s, (s[0]+1, s[1]), e] <=
                               quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e) +
                               quicksum(X[t,(s[0]+1,s[1])] for t in T if t.get_edge_type_on_side(Side.TOP) == e))
-            for s in S if s[0] < NUM_ROWS - 1 for e in E}
+            for s in S if (s[0]+1,s[1]) in S for e in E}
           
         #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
         horizontal_clashes = {(s,e) :
             m.addConstr(quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e) +
                         quicksum(X[t,(s[0],s[1]+1)] for t in T 
                             if t.get_edge_type_on_side(Side.LEFT) == Side.opposite(e)) <= 1)
-            for s in S if s[0] < NUM_COLS - 1 for e in E}
+            for s in S if (s[0],s[1]+1) in S for e in E}
             
         #constraints for clashes on edges joining squares vertically, preventing railways & highways connecting
         vertical_clashes = {(s,e) :
             m.addConstr(quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e) +
                         quicksum(X[t,(s[0]+1,s[1])] for t in T if t.get_edge_type_on_side(Side.TOP) == Side.opposite(e))
-                        <= 1) for s in S if s[1] < NUM_ROWS - 1 for e in E}
+                        <= 1) for s in S if (s[0]+1,s[1]) in S for e in E}
             
         #ensure no illegal pieces are placed on start edges
 #        no_illegal_start_joins = {}

@@ -367,7 +367,6 @@ class Board:
         for row in range(NUM_ROWS):
             for col in range(NUM_COLS):
                 if self._board[row,col].get_piece() != Piece.BLANK:
-                    print(row,col)
                     piece_image = self._board[row,col].get_image()
                     im.paste(piece_image, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
         
