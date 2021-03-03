@@ -77,6 +77,8 @@ BASIC_PIECES = [Piece.RAILWAY_CORNER, Piece.RAILWAY_T, Piece.RAILWAY_STRAIGHT,
 JUNCTION_PIECES = [Piece.OVERPASS, Piece.STRAIGHT_STATION, Piece.CORNER_STATION]
 SPECIAL_PIECES = [Piece.THREE_H_JUNCTION, Piece.THREE_R_JUNCTION, Piece.HIGHWAY_JUNCTION,
                   Piece.RAILWAY_JUNCTION, Piece.CORNER_JUNCTION, Piece.CROSS_JUNCTION]
+SWITCH_PIECES = [Piece.STRAIGHT_STATION, Piece.CORNER_STATION, Piece.THREE_H_JUNCTION, 
+                 Piece.THREE_R_JUNCTION, Piece.CORNER_JUNCTION, Piece.CROSS_JUNCTION]
 POSSIBLE_MOVES = BASIC_PIECES + JUNCTION_PIECES + SPECIAL_PIECES
 START_PIECES = [Piece.START_RAILWAY, Piece.START_HIGHWAY]
 OVERPASS_SEGMENTS = [Piece.OVERPASS_RAILWAY, Piece.OVERPASS_HIGHWAY]
@@ -111,8 +113,10 @@ class Side(Enum):
             return Side.TOP
         elif side == Side.RIGHT:
             return Side.LEFT
-        else:
+        elif side == Side.LEFT:
             return Side.RIGHT
+        else:
+            raise ValueError("invalid argument")
         
 #start locations of all the highways and railways
 HIGHWAY_START_POSITIONS = [(-1, 1, Rotation.R180), (-1, 5, Rotation.R180),
@@ -418,6 +422,13 @@ class Board:
     
     def is_square_free(self, s):
         return self.get_piece_at(s) == Piece.BLANK
+    
+    """
+    return all the (r,c) pairs of pieces adjacent to the given square
+    """
+    def adjacents(self, s):
+        return [(s[0]+dr,s[1]+dc) for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] 
+                if (s[0]+dr,s[1]+dc) in self._board]
     
     @staticmethod
     def get_start_squares():
