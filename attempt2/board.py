@@ -280,6 +280,21 @@ class Tile:
         return all_variations
     
     """
+    determine how many ends of the tile are on internal edges of the board if placed at position s
+    """
+    def loose_ends(self, s):
+        count = 0
+        if self.get_edge_type_on_side(Side.TOP) != EdgeType.B and s[0] > 0:
+            count += 1
+        if self.get_edge_type_on_side(Side.RIGHT) != EdgeType.B and s[1] < NUM_COLS - 1:
+            count += 1
+        if self.get_edge_type_on_side(Side.BOTTOM) != EdgeType.B and s[0] < NUM_ROWS - 1:
+            count += 1
+        if self.get_edge_type_on_side(Side.LEFT) != EdgeType.B and s[1] > 0:
+            count += 1
+        return count
+    
+    """
     get the edge type associated with one of the directions
     """
     def get_edge_type_on_side(self, side):
@@ -428,8 +443,12 @@ class Board:
     """
     return all the (r,c) pairs of pieces adjacent to the given square
     """
-    def adjacents(self, s):
-        return [(s[0]+dr,s[1]+dc) for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] 
+    def adjacents(self, s, internal=False):
+        if internal:
+            return [(s[0]+dr,s[1]+dc) for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)]
+                    if s[0]+dr >= 0 and s[0]+dr < NUM_ROWS and s[1]+dc >= 0 and s[1]+dc < NUM_COLS]
+        else:
+            return [(s[0]+dr,s[1]+dc) for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] 
                 if (s[0]+dr,s[1]+dc) in self._board]
     
     @staticmethod

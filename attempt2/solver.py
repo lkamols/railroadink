@@ -46,14 +46,14 @@ class LastMoveSolver:
         H = {s : m.addVar(vtype=GRB.BINARY) for s in O} #whether there is any flow from a start square to the super sink
         
         #LONGEST RAILWAY/HIGHWAY VARIABLES
-        A = {(s,e) : m.addVar(vtype=GRB.BINARY) for s in S for e in E} #whether square s is the start square
+        A = {(s,e) : m.addVar(vtype=GRB.BINARY) for s in I for e in E} #whether square s is the start square
         #longest path flow from s1 to s2 of type e
-        B = {((r,c),(r+dr,c+dc),e): m.addVar() for r,c in S 
-                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr,c+dc) in S for e in E} 
+        B = {((r,c),(r+dr,c+dc),e): m.addVar() for r,c in I
+                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr,c+dc) in I for e in E} 
         #whether there is any longest path from from s1 to s2 of type E permitted
-        C = {((r,c),(r+dr,c+dc),e): m.addVar(vtype=GRB.BINARY) for r,c in S 
-                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr,c+dc) in S for e in E} 
-        D = {(s,e) : m.addVar(vtype=GRB.BINARY) for s in S for e in E} #whether square s counts towards the "e" longest road
+        C = {((r,c),(r+dr,c+dc),e): m.addVar(vtype=GRB.BINARY) for r,c in I 
+                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr,c+dc) in I for e in E} 
+        D = {(s,e) : m.addVar(vtype=GRB.BINARY) for s in I for e in E} #whether square s counts towards the "e" longest road
         
         #CONSTRAINTS
         
@@ -148,7 +148,7 @@ class LastMoveSolver:
         
         #there can only be one start square for both the highway and railway
         one_start = {e :
-            m.addConstr(quicksum(A[s,e] for s in S) == 1)
+            m.addConstr(quicksum(A[s,e] for s in I) == 1)
             for e in E}
             
         #we can only let a longest path travel on an edge which is connected
@@ -157,43 +157,45 @@ class LastMoveSolver:
             m.addConstr(C[(r,c),(r+dr,c+dc),e] <= Y[(r,c),(r+dr,c+dc),e])
             if dr + dc > 0 else
             m.addConstr(C[(r,c),(r+dr,c+dc),e] <= Y[(r+dr,c+dc),(r,c),e])
-            for r,c in S for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in S for e in E}
+            for r,c in I for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in I for e in E}
             
         #the inflow of the longest high/railway must be greater than the outflow of the longest high/railway
         #the scoring component saps from the flow in order to score, preventing cycles
         #the start piece is not bound by the inflow
         path_flow = {(s,e) :
-            m.addConstr(quicksum(B[ss,s,e] for ss in self._board.adjacents(s)) + LONGEST_POSSIBLE_PATH * A[s,e] >=
-                        quicksum(B[s,ss,e] for ss in self._board.adjacents(s)) + D[s,e])
-            for s in S for e in E}
+            m.addConstr(quicksum(B[ss,s,e] for ss in self._board.adjacents(s, internal=True)) + LONGEST_POSSIBLE_PATH * A[s,e] >=
+                        quicksum(B[s,ss,e] for ss in self._board.adjacents(s, internal=True)) + D[s,e])
+            for s in I for e in E}
             
             
         #to restrict the longest pathway to not branch, we use the C variables, only allow flow if it is permitted by the C variables
         no_branching = {((r,c),(r+dr,c+dc),e) :
             m.addConstr(B[(r,c),(r+dr,c+dc),e] <= LONGEST_POSSIBLE_PATH * C[(r,c),(r+dr,c+dc),e])
-            for (r,c) in S for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in S for e in E}
+            for (r,c) in I for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in I for e in E}
             
         one_outflow_per_square = {((r,c),e) :
-            m.addConstr(quicksum(C[(r,c),(r+dr,c+dc),e] for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in S) <= 1)
-            for (r,c) in S for e in E}
+            m.addConstr(quicksum(C[(r,c),(r+dr,c+dc),e] for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in I) <= 1)
+            for (r,c) in I for e in E}
         
          
         #OBJECTIVE FUNCTION
         #set the objective function
         m.setObjective(quicksum(X[t,s] for s in S if Board.is_centre_square(s) for t in T) #centre square points
                     + 48 - 4 * quicksum(H[a] for a in H) #joined cluster points
-                    + quicksum(D[s,e] for s in S for e in E) #longest path points
+                    + quicksum(D[s,e] for s in I for e in E) #longest path points
+                    - quicksum(X[t,s] * t.loose_ends(s) for t in T for s in I) #subtraction for the number of loose ends (start of penalty calculation)
+                    + quicksum(2 * Y[s1,s2,e] for (s1,s2,e) in Y if s1 in I and s2 in I)      
                 , GRB.MAXIMIZE)
             
         #optimize
         m.optimize()
 
-        self._print_result(m, X, G, H, A, B, C, D, T, S, E)
+        self._print_result(m, X, Y, F, G, H, A, B, C, D, T, S, I, E)
  
     """
     print the board with the solution attached
     """
-    def _print_result(self, m, X, G, H, A, B, C, D, T, S, E):
+    def _print_result(self, m, X, Y, F, G, H, A, B, C, D, T, S, I, E):
         #find all the pieces and placements that we had and add them to the board
         for t, s in X:
             if X[t,s].x > 0.9 and self._board.is_square_free(s):
@@ -212,9 +214,20 @@ class LastMoveSolver:
         print("{0:.0f} points earned from centre squares".format(sum(X[t,s].x for s in S if Board.is_centre_square(s) for t in T)))
         #print the longest path points and paths
         for e in E:
-            print("{0:.0f} points earned from longest {1} with segments".format(sum(D[s,e].x for s in S), "railway" if e == EdgeType.R else "highway"))
-            print("\tStart:{0}".format([s for s in S if A[s,e].x > 0.9][0]))
-            print("\t{0}".format([s for s in S if D[s,e].x > 0.9 ]))
+            print("{0:.0f} points earned from longest {1} with segments".format(sum(D[s,e].x for s in I), "railway" if e == EdgeType.R else "highway"))
+            print("\tStart:{0}".format([s for s in I if A[s,e].x > 0.9][0]))
+            print("\t{0}".format([s for s in I if D[s,e].x > 0.9 ]))
+            
+        #print the penalties information
+        print("{0:.0f} points from penalties".format(-1* sum(X[t,s].x * t.loose_ends(s) for t in T for s in I) +
+                                                      sum(2*Y[s1,s2,e].x for (s1,s2,e) in Y if s1 in I and s2 in I)))
+        for s in I:
+            score = 0
+            score -= sum(t.loose_ends(s) for t in T if X[t,s].x > 0.9)
+            score += sum(Y[(s[0]+dr,s[1]+dc),s,e].x for e in E for (dr,dc) in [(-1,0), (0,-1)] if (s[0]+dr,s[1]+dc) in I)
+            score += sum(Y[s,(s[0]+dr,s[1]+dc),e].x for e in E for (dr,dc) in [(1,0), (0,1)] if (s[0]+dr,s[1]+dc) in I)
+            if score != 0:
+                print("\t{0:.0f} penalties at {1}".format(score, s))
     
 if __name__ == "__main__":
     board = rulebook_game()
