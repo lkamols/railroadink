@@ -7,6 +7,8 @@ NUM_COLS = 7
 NUM_SPECIALS = 3
 NUM_STARTS = 12
 
+LONGEST_POSSIBLE_PATH = 33
+
 #photo measurements to get the positioning correct
 TOP_OFFSET = 44
 LEFT_OFFSET = 30
