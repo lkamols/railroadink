@@ -33,40 +33,44 @@ class LastMoveSolver:
         X = {(t,s) : m.addVar(vtype=GRB.BINARY) for t in T for s in S}
         #y variables for whether there is a link between two adjacent squares with edge type e
         #note that these only go right and down (increasing row/col)
-        Y = {((r,c),(r+dr,c+dc),e) : m.addVar(vtype=GRB.BINARY)
-             for (r,c) in S for (dr, dc) in [(0,1),(1,0)] for e in E
-             if (r + dr, c + dc) in S}
+        Y = {(s,ss,e) : m.addVar(vtype=GRB.BINARY)
+             for s in S for ss in self._board.adjacents(s, forward=True) for e in E}
         
         #CONNECTING START POINTS VARIABLES
         #the flow of joins between two adjacent squares
-        F = {((r,c),(r+dr,c+dc),e): m.addVar() for r,c in S 
-                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr,c+dc) in S for e in E}
-        FF = {(s,e) : m.addVar() for s in I for e in E} #transfer flow between rails and highways at square s (from e)
-        G = {s : m.addVar() for s in O} #flow from a start square to the super sink
-        H = {s : m.addVar(vtype=GRB.BINARY) for s in O} #whether there is any flow from a start square to the super sink
+        F = {(s,ss,e): m.addVar() for s in S 
+                for ss in self._board.adjacents(s) for e in E}
+        #transfer flow between rails and highways at square s (from e)
+        FF = {(s,e) : m.addVar() for s in I for e in E} 
+        #flow from a start square to the super sink
+        G = {s : m.addVar() for s in O} 
+        #whether there is any flow from a start square to the super sink
+        H = {s : m.addVar(vtype=GRB.BINARY) for s in O} 
         
         #LONGEST RAILWAY/HIGHWAY VARIABLES
-        A = {(s,e) : m.addVar(vtype=GRB.BINARY) for s in I for e in E} #whether square s is the start square
+        #whether square s is the start square
+        A = {(s,e) : m.addVar(vtype=GRB.BINARY) for s in I for e in E} 
         #longest path flow from s1 to s2 of type e
-        B = {((r,c),(r+dr,c+dc),e): m.addVar() for r,c in I
-                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr,c+dc) in I for e in E} 
+        B = {(s,ss,e): m.addVar() for s in I
+                for ss in self._board.adjacents(s, internal=True) for e in E} 
         #whether there is any longest path from from s1 to s2 of type E permitted
-        C = {((r,c),(r+dr,c+dc),e): m.addVar(vtype=GRB.BINARY) for r,c in I 
-                for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr,c+dc) in I for e in E} 
-        D = {(s,e) : m.addVar(vtype=GRB.BINARY) for s in I for e in E} #whether square s counts towards the "e" longest road
+        C = {(s,ss,e): m.addVar(vtype=GRB.BINARY) for s in I
+                for ss in self._board.adjacents(s, internal=True) for e in E} 
+        #whether square s counts towards the "e" longest road
+        D = {(s,e) : m.addVar(vtype=GRB.BINARY) for s in I for e in E} 
         
         #CONSTRAINTS
         
         #LEGAL CONSTRAINTS
         #constraints for if there are connections on any horizontal edges
-        horizontal_y_constraints = {(s,e)  :
+        horizontal_connections = {(s,e)  :
             m.addConstr(2 * Y[s, (s[0], s[1]+1), e] <= 
                               quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e) +
                               quicksum(X[t,(s[0],s[1]+1)] for t in T if t.get_edge_type_on_side(Side.LEFT) == e))
             for s in S if (s[0],s[1]+1) in S for e in E}
         
         #constraints for if there are connections on any vertical edges
-        vertical_y_constraints = {(s,e) :
+        vertical_connections = {(s,e) :
             m.addConstr(2 * Y[s, (s[0]+1, s[1]), e] <=
                               quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e) +
                               quicksum(X[t,(s[0]+1,s[1])] for t in T if t.get_edge_type_on_side(Side.TOP) == e))
@@ -133,11 +137,11 @@ class LastMoveSolver:
             for s in O}
             
         #flow variables can only be set if the connection exists on that edge
-        flow_existence = {((r,c),(r+dr,c+dc),e):
-            m.addConstr(F[(r,c),(r+dr,c+dc),e] <= (NUM_STARTS * Y[(r,c),(r+dr,c+dc),e]))
-            if dr + dc > 0 else
-            m.addConstr(F[(r,c),(r+dr,c+dc),e] <= (NUM_STARTS * Y[(r+dr,c+dc),(r,c),e]))
-            for r,c in S for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in S for e in E}
+        flow_existence = {(s,ss,e):
+            m.addConstr(F[s,ss,e] <= (NUM_STARTS * Y[s,ss,e]))
+            if ss > s else #ss > s if the row or col is greater in ss (i.e moving right or down) by tuple comparison
+            m.addConstr(F[s,ss,e] <= (NUM_STARTS * Y[ss,s,e]))
+            for s in S for ss in self._board.adjacents(s) for e in E}
             
         #transfer flow existence, if the piece played is a junction, we can flow between highways and railways on that square
         transfer_flow = {(s,e):
@@ -153,11 +157,11 @@ class LastMoveSolver:
             
         #we can only let a longest path travel on an edge which is connected
         #flow variables can only be set if the connection exists on that edge
-        path_flow_existence = {((r,c),(r+dr,c+dc),e):
-            m.addConstr(C[(r,c),(r+dr,c+dc),e] <= Y[(r,c),(r+dr,c+dc),e])
-            if dr + dc > 0 else
-            m.addConstr(C[(r,c),(r+dr,c+dc),e] <= Y[(r+dr,c+dc),(r,c),e])
-            for r,c in I for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in I for e in E}
+        path_flow_existence = {(s,ss,e):
+            m.addConstr(C[s,ss,e] <= Y[s,ss,e])
+            if ss > s else
+            m.addConstr(C[s,ss,e] <= Y[ss,s,e])
+            for s in I for ss in self._board.adjacents(s, internal=True) for e in E}
             
         #the inflow of the longest high/railway must be greater than the outflow of the longest high/railway
         #the scoring component saps from the flow in order to score, preventing cycles
@@ -169,13 +173,13 @@ class LastMoveSolver:
             
             
         #to restrict the longest pathway to not branch, we use the C variables, only allow flow if it is permitted by the C variables
-        no_branching = {((r,c),(r+dr,c+dc),e) :
-            m.addConstr(B[(r,c),(r+dr,c+dc),e] <= LONGEST_POSSIBLE_PATH * C[(r,c),(r+dr,c+dc),e])
-            for (r,c) in I for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in I for e in E}
+        no_branching = {(s,ss,e) :
+            m.addConstr(B[s,ss,e] <= LONGEST_POSSIBLE_PATH * C[s,ss,e])
+            for s in I for ss in self._board.adjacents(s, internal=True) for e in E}
             
-        one_outflow_per_square = {((r,c),e) :
-            m.addConstr(quicksum(C[(r,c),(r+dr,c+dc),e] for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] if (r+dr, c+dc) in I) <= 1)
-            for (r,c) in I for e in E}
+        one_outflow_per_square = {(s,e) :
+            m.addConstr(quicksum(C[s,ss,e] for ss in self._board.adjacents(s, internal=True)) <= 1)
+            for s in I for e in E}
         
          
         #OBJECTIVE FUNCTION
@@ -184,7 +188,7 @@ class LastMoveSolver:
                     + 48 - 4 * quicksum(H[a] for a in H) #joined cluster points
                     + quicksum(D[s,e] for s in I for e in E) #longest path points
                     - quicksum(X[t,s] * t.loose_ends(s) for t in T for s in I) #subtraction for the number of loose ends (start of penalty calculation)
-                    + quicksum(2 * Y[s1,s2,e] for (s1,s2,e) in Y if s1 in I and s2 in I)      
+                    + quicksum(2*Y[s1,s2,e] for (s1,s2,e) in Y if s1 in I and s2 in I) #these points are not lost if there is a join on that edge  
                 , GRB.MAXIMIZE)
             
         #optimize
@@ -204,7 +208,7 @@ class LastMoveSolver:
         self._board.fancy_board_print()
         
         #next print out the resulting score
-        print("The total points earned (in this turn) were: {0:.0f}\n".format(m.objVal))
+        print("The total points were: {0:.0f}\n".format(m.objVal))
         print("{0:.0f} points earned from joining exits:".format(48 - 4 * sum(H[a].x for a in H)))
         #print the clusters left
         for a in G:

@@ -281,6 +281,7 @@ class Tile:
     
     """
     determine how many ends of the tile are on internal edges of the board if placed at position s
+    loose ends are only counted on the right and bottom edges, so they aren't double counted
     """
     def loose_ends(self, s):
         count = 0
@@ -442,13 +443,18 @@ class Board:
     
     """
     return all the (r,c) pairs of pieces adjacent to the given square
+    if internal is true, it is limited to internal pieces
+    if forward is true, only squares to the right or below are considered
     """
-    def adjacents(self, s, internal=False):
+    def adjacents(self, s, internal=False, forward=False):
+        directions = [(0,1),(1,0)]
+        if not forward:
+            directions += [(-1,0),(0,-1)]
         if internal:
-            return [(s[0]+dr,s[1]+dc) for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)]
+            return [(s[0]+dr,s[1]+dc) for (dr,dc) in directions
                     if s[0]+dr >= 0 and s[0]+dr < NUM_ROWS and s[1]+dc >= 0 and s[1]+dc < NUM_COLS]
         else:
-            return [(s[0]+dr,s[1]+dc) for (dr,dc) in [(0,1),(0,-1),(1,0),(-1,0)] 
+            return [(s[0]+dr,s[1]+dc) for (dr,dc) in directions
                 if (s[0]+dr,s[1]+dc) in self._board]
     
     @staticmethod
