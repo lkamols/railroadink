@@ -46,6 +46,8 @@ class LastMoveSolver:
         G = {s : m.addVar() for s in O} 
         #whether there is any flow from a start square to the super sink
         H = {s : m.addVar(vtype=GRB.BINARY) for s in O} 
+        #whether the extra point for connecting all of them is earned
+        J = m.addVar(vtype=GRB.BINARY)
         
         #LONGEST RAILWAY/HIGHWAY VARIABLES
         #whether square s is the start square
@@ -62,6 +64,52 @@ class LastMoveSolver:
         #CONSTRAINTS
         
         #LEGAL CONSTRAINTS
+        
+        #only place one tile in each square
+        one_tile_per_square = {s :
+            m.addConstr(quicksum(X[t,s] for t in T) <= 1)
+            for s in S}
+                   
+        #ensure all the pieces that are part of the board are kept
+        default_placements = {s :
+            m.addConstr(X[self._board.get_tile_at(s),s] == 1)
+            for s in S if not self._board.is_square_free(s)}
+            
+        #use all of the pieces required to be used
+        use_pieces = {p : 
+            m.addConstr(quicksum(X[t,s] for s in S if self._board.is_square_free(s)
+                                 for t in Tile.get_variations(p)) == 
+                        (self._moves[p] if p in self._moves else 0))
+            for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES}
+            
+        #play special pieces at most once each
+        special_once = {p:
+                m.addConstr(quicksum(X[t,s] for s in S if self._board.is_square_free(s) for t in Tile.get_variations(p))<=1)
+                for p in SPECIAL_PIECES}
+            
+        #play at most one special piece this turn  
+        one_special_per_turn = m.addConstr(quicksum(X[t,s] for s in S if self._board.is_square_free(s)
+                     for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=1)
+
+        #play max 3 special pieces total
+        three_specials_max = m.addConstr(quicksum(X[t,s] for s in S
+                     for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=3)
+            
+        
+        #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
+        horizontal_clashes = {(s,e) :
+            m.addConstr(quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e) +
+                        quicksum(X[t,(s[0],s[1]+1)] for t in T 
+                            if t.get_edge_type_on_side(Side.LEFT) == EdgeType.clash_type(e)) <= 1)
+            for s in S if (s[0],s[1]+1) in S for e in E}
+            
+        #constraints for clashes on edges joining squares vertically, preventing railways & highways connecting
+        vertical_clashes = {(s,e) :
+            m.addConstr(quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e) +
+                        quicksum(X[t,(s[0]+1,s[1])] for t in T if t.get_edge_type_on_side(Side.TOP) == EdgeType.clash_type(e))
+                        <= 1) for s in S if (s[0]+1,s[1]) in S for e in E}
+        
+        
         #constraints for if there are connections on any horizontal edges
         horizontal_connections = {(s,e)  :
             m.addConstr(2 * Y[s, (s[0], s[1]+1), e] <= 
@@ -75,56 +123,14 @@ class LastMoveSolver:
                               quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e) +
                               quicksum(X[t,(s[0]+1,s[1])] for t in T if t.get_edge_type_on_side(Side.TOP) == e))
             for s in S if (s[0]+1,s[1]) in S for e in E}
-          
-        #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
-        horizontal_clashes = {(s,e) :
-            m.addConstr(quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e) +
-                        quicksum(X[t,(s[0],s[1]+1)] for t in T 
-                            if t.get_edge_type_on_side(Side.LEFT) == EdgeType.clash_type(e)) <= 1)
-            for s in S if (s[0],s[1]+1) in S for e in E}
             
-        #constraints for clashes on edges joining squares vertically, preventing railways & highways connecting
-        vertical_clashes = {(s,e) :
-            m.addConstr(quicksum(X[t,s] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e) +
-                        quicksum(X[t,(s[0]+1,s[1])] for t in T if t.get_edge_type_on_side(Side.TOP) == EdgeType.clash_type(e))
-                        <= 1) for s in S if (s[0]+1,s[1]) in S for e in E}
-            
-        #ensure all the pieces that are part of the board are kept
-        default_placements = {s :
-            m.addConstr(X[self._board.get_tile_at(s),s] == 1)
-            for s in S if not self._board.is_square_free(s)}
-            
-        #use all of the pieces required to be used
-        use_pieces = {p : 
-            m.addConstr(quicksum(X[t,s] for s in S if self._board.is_square_free(s)
-                                 for t in Tile.get_variations(p)) == 
-                        (self._moves[p] if p in self._moves else 0))
-            for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES}
-            
-        #only place one tile in each square
-        one_tile_per_square = {s :
-            m.addConstr(quicksum(X[t,s] for t in T) <= 1)
-            for s in S}
-            
-        #play special pieces at most once each
-        special_once = {p:
-                m.addConstr(quicksum(X[t,s] for s in S if self._board.is_square_free(s) for t in Tile.get_variations(p))<=1)
-                for p in SPECIAL_PIECES}
-            
-        #play at most one special piece this turn  
-        m.addConstr(quicksum(X[t,s] for s in S if self._board.is_square_free(s)
-                     for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=1)
 
-        #play max 3 special pieces total
-        m.addConstr(quicksum(X[t,s] for s in S
-                     for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=3)
-            
         #JOINING CONSTRAINTS    
         
         #the flow into an internal square must be the same as the flow out
         internal_flows = {(s,e) :
-            m.addConstr(quicksum(F[s,ss,e] for ss in self._board.adjacents(s)) + FF[s,EdgeType.clash_type(e)] ==
-                        quicksum(F[ss,s,e] for ss in self._board.adjacents(s)) + FF[s,e])
+            m.addConstr(quicksum(F[s,ss,e] for ss in self._board.adjacents(s)) + FF[s,e] ==
+                        quicksum(F[ss,s,e] for ss in self._board.adjacents(s)) + FF[s,EdgeType.clash_type(e)])
             for s in I for e in E}
             
         external_flows = {s :
@@ -147,6 +153,8 @@ class LastMoveSolver:
         transfer_flow = {(s,e):
             m.addConstr(FF[s,e] <= NUM_STARTS * quicksum(X[t,s] for t in T if t.get_piece() in SWITCH_PIECES))
             for s in I for e in E}
+            
+        bonus_point = m.addConstr((NUM_STARTS - 1)*J <= quicksum((1 - H[s]) for s in H))
         
         #LONGEST RAILWAY/HIGHWAY CONSTRAINTS
         
@@ -184,22 +192,23 @@ class LastMoveSolver:
          
         #OBJECTIVE FUNCTION
         #set the objective function
-        m.setObjective(quicksum(X[t,s] for s in S if Board.is_centre_square(s) for t in T) #centre square points
-                    + 48 - 4 * quicksum(H[a] for a in H) #joined cluster points
+        m.setObjective(quicksum(X[t,s] for s in I if Board.is_centre_square(s) for t in T) #centre square points
+                    + 48 - 4 * quicksum(H[s] for s in H) #joined cluster points
                     + quicksum(D[s,e] for s in I for e in E) #longest path points
                     - quicksum(X[t,s] * t.loose_ends(s) for t in T for s in I) #subtraction for the number of loose ends (start of penalty calculation)
-                    + quicksum(2*Y[s1,s2,e] for (s1,s2,e) in Y if s1 in I and s2 in I) #these points are not lost if there is a join on that edge  
+                    + quicksum(2*Y[s,ss,e] for (s,ss,e) in Y if s in I and ss in I) #these points are not lost if there is a join on that edge
+                    + J #the bonus point for connecting all of them together
                 , GRB.MAXIMIZE)
             
         #optimize
         m.optimize()
 
-        self._print_result(m, X, Y, F, G, H, A, B, C, D, T, S, I, E)
+        self._print_result(m, X, Y, F, G, H, J, A, B, C, D, T, S, I, E)
  
     """
     print the board with the solution attached
     """
-    def _print_result(self, m, X, Y, F, G, H, A, B, C, D, T, S, I, E):
+    def _print_result(self, m, X, Y, F, G, H, J, A, B, C, D, T, S, I, E):
         #find all the pieces and placements that we had and add them to the board
         for t, s in X:
             if X[t,s].x > 0.9 and self._board.is_square_free(s):
@@ -232,6 +241,8 @@ class LastMoveSolver:
             score += sum(Y[s,(s[0]+dr,s[1]+dc),e].x for e in E for (dr,dc) in [(1,0), (0,1)] if (s[0]+dr,s[1]+dc) in I)
             if score != 0:
                 print("\t{0:.0f} penalties at {1}".format(score, s))
+        
+        print("{0:.0f} points from the bonus point".format(abs(J.x)))
     
 if __name__ == "__main__":
     board = rulebook_game()

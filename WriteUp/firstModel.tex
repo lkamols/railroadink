@@ -1,0 +1,201 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{amsmath}
+\usepackage{multicol}
+\usepackage{graphicx}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{float}
+\usepackage{geometry}
+\usepackage[dvipsnames]{xcolor}
+
+\counterwithin*{equation}{section}
+\counterwithin*{equation}{subsection}
+
+\allowdisplaybreaks
+
+\geometry{left=20mm, right=20mm}
+
+\title{Railroad Ink}
+\author{Luke Kamols}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section*{Last Move}
+
+\subsection*{Part A}
+
+\subsubsection*{Sets}
+\begin{align*}
+I &- \textrm{set of all inside squares, as (row,col) pairs} \\
+O &- \textrm{set of all outside (start) squares, as (row, col) pairs} \\
+S &- \textrm{set of all squares, } S = I \cup O \\
+P &- \textrm{set of all pieces} \\
+T &- \textrm{set of all possible tiles that can be placed, with a piece, rotation and reflection} \\
+E &- \textrm{set of the edge types} E = \{ \textrm{railway, highway} \} \\
+P_s &- \textrm{set of all special pieces, } P_s \subseteq P \\
+T_j &- \textrm{set of all junction tile, } T_j \subseteq T
+\end{align*}
+
+\subsubsection*{Data}
+\begin{align*}
+numstarts &- \textrm{ the number of start pieces} \\
+MP &- \textrm{ the longest possible path that can be constructed}
+\end{align*}
+
+\subsubsection*{Functions}
+\begin{align*}
+\texttt{adj}(s) &- \textrm{ returns the squares adjacent to square } s \\
+\texttt{loose-ends}(t,s) &- \textrm{ returns the count of loose ends on internal edges if tile } t \in T \textrm{ is placed at square } s \in S \\
+\texttt{centre}(s) &- \textrm{ returns whether square } s \textrm{ is a centre square} \\
+\texttt{clash}(e) &- \textrm{ returns the edge type that clashes with the given edge type} \\
+\texttt{tile-at}(s) &- \textrm{ returns the tile currently on the board at square } s \in S \textrm{ if there is one} \\
+\texttt{free}(s) &- \textrm{ returns whether a piece can be placed at square } s \in S \\
+\texttt{variations}(p) &- \textrm{ returns all the possible tiles associated with piece } p \\
+texttt{hand-count}(p) &- \textrm{ how many of piece } p \textrm{ are in the current hand} \\
+\end{align*}
+
+\subsubsection*{Variables}
+\begin{align*}
+& \textbf{board variables} \\
+x_{t,s} &- 1 \textrm{ if tile } t \in T \textrm{ is placed at square } s \in S \\
+y_{s,s',e} &- \textrm{ whether there is a connection between } s \in S \textrm{ and } 
+s' \in \texttt{adj}(s) \textrm{ s.t } s < s' \textrm{ of type } e \in E \\
+& \textbf{connecting flow variables} \\
+f_{s,s',e} &- \textrm{ connecting flow from } s \in S \textrm{ to } s' \in \texttt{adj}(s) \textrm{ of type } e \in E \textrm{ for joining the start squares} \\
+f'_{s,e} &- \textrm{ connecting flow from edge type } e \in E \textrm{ to the other edge type (for junctions) at square } s \in I \\
+g_{s} &- \textrm{ connecting flow from start square } s \in O \textrm{ to the super sink} \\
+h_{s} &- 1 \textrm{ if there is any connecting flow from square } s \in O \textrm{ to the super sink} \\
+j &- 1 \textrm{ if the bonus point for connecting all start squares is earned} \\
+& \textbf{longest path variables} \\
+a_{s,e} &- \textrm{ whether square } s \in I \textrm{ is the start square of the longest railway of type } e \in E \\
+b_{s,s',e} &- \textrm{ longest path flow from } s \in I \textrm{ to } s' \in \texttt{adj}(s) \textrm{ s.t } s' \in I \textrm{ of type } e \in E \\
+c_{s,s',e} &- \textrm{ whether longest path flow of type } e \in E \textrm{ is permitted from } s \in I \textrm{ to } s' \in \texttt{adj}(s) \textrm{ s.t } s' \in I \\
+d_{s,e} &- \textrm{ whether square } s \in I \textrm{ is part of the longest path of type } e \in E
+\end{align*}
+
+\subsubsection*{Objective}
+Maximise:
+$$\left( 48 - 4 \cdot \sum_{s \in O} h_s + j \right) + 
+\left( \sum_{\substack{s \in I | \\ \texttt{centre}(s)}}x_{t,s} \right) + 
+\left( \sum_{\substack{s \in I \\ e \in E}}d_{s,e} \right) - 
+\left( \sum_{\substack{t \in T \\ s \in I}}x_{t,s}\cdot \texttt{loose-ends}(t,s) - \sum_{\substack{(s,s',e) \in y | \\ s,s' \in I}}2 \cdot y_{s,s',e} \right)$$
+This objective function is the number of points earned, there are four components, in order:
+\begin{itemize}
+\item[1)] Points earned from connections between start squares.
+Any square without a super sink connection is connected and scores points. 
+$j$ is the bonus point for connecting all start squares.
+\item[2)] Points earned from placing pieces on the centre squares.
+\item[3)] Points earned from the longest railway and highway. 
+$d_{s,e}$ variables are only set if a square is on the longest path. 
+\item[4)] Points lost due to errors.
+Points lost to errors can be counted as the total number of railways/highways on internal edges minus the pairs that are joined together.
+\end{itemize}
+
+\subsubsection*{Constraints}
+\begin{align}
+\textbf{Piece placement constraints} \notag \\
+\label{one_tile_per_square}
+\sum_{t \in T} x_{t,s} <= 1 &&
+\forall s \in S \\ 
+\label{default_placements}
+x_{\texttt{tile-at}(s),s} = 1 &&
+\forall s \in S ~|~ \sim \texttt{free}(s) \\
+\label{use_pieces}
+\sum_{\substack{s \in S ~|~ \texttt{free}(s) \\  t \in \texttt{variations}(p)}}x_{t,s} = \texttt{hand-count}(p) &&
+\forall p \in P \\
+\label{special_once}
+\sum_{\substack{s \in S ~|~ \texttt{free}(s), \\ t \in \texttt{variations}(p)}} x_{t,s} \leq 1 &&
+\forall p \in P_s \\
+\label{one_special_per_turn}
+\sum_{\substack{s \in S ~|~ \texttt{free}(s), \\ p \in P_s, ~ t \in \texttt{variations}(p)}}x_{t,s} \leq 1
+\\
+\label{three_specials_max}
+\sum_{\substack{s \in S,~ p \in P_s \\ t \in \texttt{variations}(p)}} \leq 3
+\\
+\label{horizontal_clashes}
+\sum_{\substack{t \in T ~| \\ t.R = e}}x_{t,s} + \sum_{\substack{t \in T ~| \\ t.L = \texttt{clash}(e)}}x_{t,s'} \leq 1 &&
+\forall s = (r,c) \in S, e \in E ~|~ s' = (r,c+1) \in S \\
+\label{vertical_clashes}
+\sum_{\substack{t \in T ~| \\ t.B = e}}x_{t,s} + \sum_{\substack{t \in T ~| \\ t.T = \texttt{clash}(e)}}x_{t,s'} \leq 1 &&
+\forall s = (r,c) \in S, e \in E ~|~ s' = (r+1,c) \in S \\
+\label{horizontal_connections}
+2 \cdot y_{s,s',e} \leq \sum_{\substack{t \in T ~| \\ t.R = e}} x_{t,s} + \sum_{\substack{t \in T ~| \\ t.L = e}}x_{t,s'} && 
+\forall s = (r,c) \in S, e \in E ~|~  s' = (r,c+1) \in S \\
+\label{vertical_connections} 
+2 \cdot y_{s,s',e} \leq \sum_{\substack{t \in T ~| \\ t.B = e}} x_{t,s} + \sum_{\substack{t \in T ~| \\ t.T = e}}x_{t,s'} && 
+\forall s = (r,c) \in S, e \in E ~|~  s' = (r+1,c) \in S \\
+\textbf{Joining constraints} \notag \\
+\label{internal_flows}
+\sum_{s' \in \texttt{adj}(s)}f_{s,s',e} + f'_{s,e} = 
+\sum_{s' \in \texttt{adj}(s)}f_{s',s,e} + f'_{s,\texttt{clash}(e)} &&
+\forall s \in I, e \in E \\
+\label{external_flows}
+1 + \sum_{\substack{s' \in \texttt{adj}(s) \\ e \in E}}f_{s',s,e} = 
+\sum_{\substack{s' \in \texttt{adj}(s) \\  e \in E}}f_{s,s',e} + g_s &&
+\forall s \in O \\
+\label{sink_connections}
+g_s \leq numStarts \cdot h_s &&
+\forall s \in O \\
+\label{flow_existence_1}
+f_{s,s',e} \leq numStarts \cdot y_{s,s',e} &&
+\forall s \in S, s' \in \texttt{adj}(s), e \in E ~|~ s' > s \\
+\label{flow_existence_2}
+f_{s,s',e} \leq numStarts \cdot y_{s',s,e} &&
+\forall s \in S, s' \in \texttt{adj}(s), e \in E ~|~ s' < s \\
+\label{transfer_flow}
+f'_{s,e} \leq numStarts \cdot \sum_{ t \in T_j}x_{t,s} &&
+\forall s \in I, e \in E \\
+\label{bonus_point}
+(numStarts - 1) \cdot j \leq \sum_{s \in O}(1 - h_s) \\
+\textbf{Longest path constraints} \notag \\
+\label{one_start}
+\sum_{s \in I} a_{s,e} = 1 &&
+\forall e \in E \\
+\label{path_flow_existence_1}
+c_{s,s',e} \leq y_{s,s',e} &&
+\forall s \in S, e \in E, s' \in \texttt{adj}(s) ~|~ s' \in I \wedge s < s' \\
+\label{path_flow_existence_2}
+c_{s,s',e} \leq y_{s',s,e} &&
+\forall s \in S, e \in E, s' \in \texttt{adj}(s) ~|~ s' \in I \wedge s > s' \\
+\label{path_flow}
+\sum_{\substack{s' \in \texttt{adj}(s) | \\ s' \in I}}b_{s',s,e} + MP \cdot a_{s,e} =
+\sum_{\substack{s' \in \texttt{adj}(s) | \\ s' \in I}}b_{s,s',e} + d_{s,e} &&
+\forall s \in I, e \in E \\
+\label{no_branching}
+b_{s,s',e} \leq MP \cdot c_{s,s',e} &&
+\forall s \in S, e \in E, s' \in \texttt{adj}(s) ~|~ s' \in I \\
+\label{one_outflow_per_square}
+\sum_{\substack{s' \in \texttt{adj}(s) | \\ s' \in I}}c_{s,s',e} \leq 1 &&
+\forall s \in I, e \in E
+\end{align}
+These constraints are designed as follows:
+\begin{itemize}
+\item[(\ref{one_tile_per_square})] Only one tile can be placed at each square.
+\item[(\ref{default_placements})] All squares that are already occupied must finish with that piece there.
+\item[(\ref{use_pieces})] Use pieces as required in your hand.
+\item[(\ref{special_once})] Each special piece can only be played once.
+\item[(\ref{one_special_per_turn})] Only one special piece can be played this turn.
+\item[(\ref{three_specials_max})] Only three specials can be played total.
+\item[(\ref{horizontal_clashes}, \ref{vertical_clashes})] Cannot place two pieces next to each other that directly clash with each other (i.e have a railway run into a highway).
+\item[(\ref{horizontal_connections}, \ref{vertical_connections})] Can only set the $y_{s,s',e}$ variable (connecting two squares with edge type $e$) if there are matching edges between the squares.
+\item[(\ref{internal_flows})] The joining inflow at internal squares (from adjacent squares or converted through a junction) must equal the outflow (to adjacent squares or passed through the junction).
+\item[(\ref{external_flows})] The joining inflow at start squares (inflow of 1 plus from adjacent square) must equal the outflow (flow to adjacent square and to the super sink).
+\item[(\ref{sink_connections})] The $h_s$ variable must be set if there is any flow to the super sink, i.e $g_s > 0$.
+\item[(\ref{flow_existence_1}, \ref{flow_existence_2})] There can only be joining flow when there is a connection between the two squares of that edge type.
+\item[(\ref{transfer_flow})] If there is a junction at a given square, joining flow can readily flow between the two edge types. 
+This is only not permitted for overpasses.
+\item[(\ref{bonus_point})] An extra point can be awarded if all start pieces are joined together.
+\item[(\ref{one_start})] The longest path of each type can only have one start square.
+\item[(\ref{path_flow_existence_1}, \ref{path_flow_existence_2})] The longest path of a certain type can only travel on an edge that has a connection of that type. 
+\item[(\ref{path_flow})] The inflow of the longest path (from adjacent squares, plus a large inflow at the start square) must be greater than the outflow (to adjacent squares, plus points allocated to this square)
+\item[(\ref{no_branching}, \ref{one_outflow_per_square})] These constraints prevent branching of the longest path. 
+There may only be outflow in one direction from any given square.
+\end{itemize}
+
+
+\end{document}
