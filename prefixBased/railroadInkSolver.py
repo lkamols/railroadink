@@ -108,10 +108,10 @@ class RailroadInkSolver:
         L = {(s,ss,e,d): m.addVar() for s in I
                 for ss in self._board.adjacents(s, internal=True) for e in E for d in D} 
         #whether there is any longest path from from s1 to s2 of type E permitted
-        M = {(s,ss,d): m.addVar(vtype=GRB.BINARY) for s in I
+        M = {(s,ss,e,d): m.addVar(vtype=GRB.BINARY) for s in I
                 for ss in self._board.adjacents(s, internal=True) for e in E for d in D} 
         #whether square s counts towards the "e" longest road
-        N = {(s,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
+        N = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
         
         #SCORING VARIABLES
         #the score for every final scenario
@@ -232,6 +232,40 @@ class RailroadInkSolver:
         bonus_point = {d :
             m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum((1 - H[s,d]) for s in O))
             for d in D}
+            
+        #LONGEST RAILWAY/HIGHWAY CONSTRAINTS
+        #these are only calculated for the full scenarios
+        
+        #there can only be one start square for both the highway and railway
+        one_start = {(e,d) :
+            m.addConstr(quicksum(K[s,e,d] for s in I) == 1)
+            for e in E for d in D}
+            
+        #we can only let a longest path travel on an edge which is connected
+        #flow variables can only be set if the connection exists on that edge
+        path_flow_existence = {(s,ss,e,d):
+            m.addConstr(M[s,ss,e,d] <= Y[s,ss,e,d])
+            if ss > s else
+            m.addConstr(M[s,ss,e,d] <= Y[ss,s,e,d])
+            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}   
+            
+        #the inflow of the longest path must be greater than the outflow of the longest path
+        #the scoring component saps from the flow in order to score, preventing cycles
+        #the start piece is not bound by the inflow
+        path_flow = {(s,e,d) :
+            m.addConstr(quicksum(L[ss,s,e,d] for ss in self._board.adjacents(s, internal=True)) + LONGEST_POSSIBLE_PATH * K[s,e,d] >=
+                        quicksum(L[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)) + N[s,e,d])
+            for s in I for e in E for d in D}
+            
+        #to restrict the longest pathway to not branch, we use the C variables, only allow flow if it is permitted by the C variables
+        no_branching = {(s,ss,e,d) :
+            m.addConstr(L[s,ss,e,d] <= LONGEST_POSSIBLE_PATH * M[s,ss,e,d])
+            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
+            
+        #only let one C variable be set outflowing from any given square, to prevent branching
+        one_outflow_per_square = {(s,e,d) :
+            m.addConstr(quicksum(M[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)) <= 1)
+            for s in I for e in E for d in D}
         
         
         #SCORING CONSTRAINTS
@@ -240,6 +274,7 @@ class RailroadInkSolver:
             m.addConstr(Alpha[d] <= quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
                                   + 48 - 4 * quicksum(H[s,d] for s in O) #join cluster points
                                   + J[d] #bonus point
+                                  + quicksum(N[s,e,d] for s in I for e in E) #longest path points
                                   - quicksum(X[t,s,c] * t.loose_ends(s) for t in T for s in I for c in prefixes(d)) #subtraction for the number of loose ends (start of penalty calculation)
                                   + quicksum(2*Y[s,ss,e,dd] for (s,ss,e,dd) in Y if dd == d and s in I and ss in I) #these points are not lost if there is a join on that edge
             )
@@ -257,15 +292,18 @@ class RailroadInkSolver:
             with open(resultsFile, mode="w", newline="") as csv_file:
                 csv_writer = csv.writer(csv_file, delimiter=",")
                 csv_writer.writerow(["Turn {0}".format(self._turn + i) for i in range(len(self._dice_rolls))] + 
-                                     ["Score", "Connecting Exits", "Centre Points", "Errors", "Bonus Point"])
+                                     ["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors", "Bonus Point"])
                 for d in D:
                     score = round(Alpha[d].x)
                     centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)))
                     connecting_exits = round(48 - 4 * sum(H[s,d].x for s in O))
-                    bonus_point = round(J[d].x)
+                    longest_railway = round(sum(N[s,EdgeType.R,d].x for s in I))
+                    longest_highway = round(sum(N[s,EdgeType.H,d].x for s in I))
                     errors = round(-1* sum(X[t,s,c].x * t.loose_ends(s) for t in T for s in I for c in prefixes(d))
                                   + sum(2*Y[s,ss,e,dd].x for (s,ss,e,dd) in Y if dd == d and s in I and ss in I))
-                    csv_writer.writerow([turn for turn in d] + [score, connecting_exits, centre_points, errors, bonus_point])
+                    bonus_point = round(J[d].x)
+                    csv_writer.writerow([turn for turn in d] + [score, connecting_exits, longest_railway, 
+                                                                longest_highway, centre_points, errors, bonus_point])
                     
                 
  
