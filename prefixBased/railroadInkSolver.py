@@ -111,6 +111,10 @@ class RailroadInkSolver:
         #whether square s counts towards the "e" longest road
         N = {(s,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
         
+        #SCORING VARIABLES
+        #the score for every final scenario
+        Alpha = {d : m.addVar() for d in D}
+        
         #CONSTRAINTS
         
         #LEGAL CONSTRAINTS
@@ -121,11 +125,11 @@ class RailroadInkSolver:
             m.addConstr(quicksum(X[t,s,c] for t in T for c in prefixes(d)) <= 1)
             for s in S for d in D}
             
-        #ensure all the pieces that are already on the board are kept, the default placements have 
-        #a dice roll scenario index of ()
-        default_placements = {s :
-            m.addConstr(X[self._board.get_tile_at(s),s,()] == 1)
-            for s in S if not self._board.is_square_free(s)}  
+        #ensure all the pieces that are already on the board are kept, and no others are placed
+        #default placements have a scenario index of ()
+        default_placements = {(t,s) :
+            m.addConstr(X[t,s,()] == (1 if self._board.get_tile_at(s) == t else 0))
+            for s in S for t in T}
             
         #on every turn, in every scenario, we can only use the moves that are allocated
         use_pieces = {(p,c) : 
@@ -134,9 +138,72 @@ class RailroadInkSolver:
                         (self._dice_rolls[len(c) - 1][c[-1]].get_dice().get(p, 0))) 
                         #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
             for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
+    
+        #play special pieces at most once each in every possible dice roll scenario
+        special_once = {(p,d):
+                m.addConstr(quicksum(X[t,s,c] for s in S
+                        for t in Tile.get_variations(p) for c in prefixes(d)) <= 1)
+                for p in SPECIAL_PIECES for d in D}
+            
+        #play at most one special piece per turn (in every scenario)
+        one_special_per_turn = {c :
+            m.addConstr(quicksum(X[t,s,c] for s in S for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=1)
+            for c in C if c != tuple()}
+            
+        #play max 3 special pieces total, for every single set of full dice rolls
+        three_specials_max = {d :
+            m.addConstr(quicksum(X[t,s,c] for s in S for c in prefixes(d)
+                     for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=3)
+            for d in D}
+            
+            
+        #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
+        #this needs to hold across every final scenario, only consider the final scenarios as the earlier ones are
+        #accomplished using the final scenarios and are redundant to add
+        horizontal_clashes = {(s,e,d) :
+            m.addConstr(quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)) +
+                        quicksum(X[t,(s[0],s[1]+1),c] for t in T 
+                            if t.get_edge_type_on_side(Side.LEFT) == EdgeType.clash_type(e) for c in prefixes(d)) <= 1)
+            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
+            
+        #constraints for clashes on edges joining squares vertically, preventing railways & highways connecting
+        #scenario logic as for above constraints
+        vertical_clashes = {(s,e,d) :
+            m.addConstr(quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)) +
+                        quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == EdgeType.clash_type(e) 
+                                    for c in prefixes(d)) <= 1) 
+            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+            
+        #constraints for if there are connections on any horizontal edges
+        #Y variables only defined at the end, so they can be set if any of the X value prefixes are set
+        #only define these rules for the full dice roll
+        horizontal_connections = {(s,e,d)  :
+            m.addConstr(2 * Y[s, (s[0], s[1]+1), e, d] <= 
+                              quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)) +
+                              quicksum(X[t,(s[0],s[1]+1),c] for t in T if t.get_edge_type_on_side(Side.LEFT) == e for c in prefixes(d)))
+            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
+            
+        #constraints for if there are connections on any vertical edges
+        #scenario definition as above
+        vertical_connections = {(s,e,d) :
+            m.addConstr(2 * Y[s, (s[0]+1, s[1]), e, d] <=
+                              quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)) +
+                              quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
+            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
         
             
-        m.setObjective(quicksum(X[a] for a in X), GRB.MAXIMIZE)
+        #JOINING CONSTRAINTS    
+        
+        
+        
+        #SCORING CONSTRAINTS
+        scoring = {d :
+            m.addConstr(Alpha[d] == quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
+                                  + quicksum(2*Y[s,ss,e,dd] for (s,ss,e,dd) in Y if dd == d and s in I and ss in I)
+            )
+            for d in D}
+            
+        m.setObjective(quicksum(Alpha[d] for d in D), GRB.MAXIMIZE)
             
         #optimize
         m.optimize()
@@ -147,7 +214,7 @@ class RailroadInkSolver:
     print the board with the solution attached
     """
     def _print_result(self, m, X, C):
-        #find all the pieces and placements that we had and add them to the board
+        #find all the pieces and placements that we made and add them to the board
         for t, s, c in X:
             if c != tuple() and X[t,s,c].x > 0.9:
                 print(t,s,c)
@@ -158,5 +225,5 @@ class RailroadInkSolver:
 if __name__ == "__main__":
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
-    s = RailroadInkSolver(board, 7, dice_rolls, "")
+    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
     s.solve()

@@ -84,7 +84,7 @@ class LastMoveSolver:
             
         #play special pieces at most once each
         special_once = {p:
-                m.addConstr(quicksum(X[t,s] for s in S if self._board.is_square_free(s) for t in Tile.get_variations(p))<=1)
+                m.addConstr(quicksum(X[t,s] for s in S for t in Tile.get_variations(p))<=1)
                 for p in SPECIAL_PIECES}
             
         #play at most one special piece this turn  
