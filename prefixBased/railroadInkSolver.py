@@ -1,6 +1,7 @@
 
 from gurobipy import *
 from board import *
+import csv
 
 
 """
@@ -54,8 +55,9 @@ class RailroadInkSolver:
     
     """
     create and solve an IP that gives the solutions to the railroad ink problem
+    resultsFile - if not None, will create a csv with information about the problem
     """
-    def solve(self):
+    def solve(self, resultsFile=None):
         
         #SETS
         
@@ -193,13 +195,53 @@ class RailroadInkSolver:
         
             
         #JOINING CONSTRAINTS    
+        #these are all done for only the complete dice rolls, so for d in D
         
+        #the flow into an internal square must be the same as the flow out
+        internal_flows = {(s,e,d) :
+            m.addConstr(quicksum(F[s,ss,e,d] for ss in self._board.adjacents(s)) + FF[s,e,d] ==
+                        quicksum(F[ss,s,e,d] for ss in self._board.adjacents(s)) + FF[s,EdgeType.clash_type(e),d])
+            for s in I for e in E for d in D}
+            
+        #the flow into an external square must be the same as the flow out
+        #these have a guaranteed flow in of 1 as start squares
+        #they also have the ability to flow out to the sink with variable G
+        external_flows = {(s,d) :
+            m.addConstr(1 + quicksum(F[ss,s,e,d] for ss in self._board.adjacents(s) for e in E) ==
+                        quicksum(F[s,ss,e,d] for ss in self._board.adjacents(s) for e in E) + G[s,d])
+            for s in O for d in D}
+            
+        #the H variables must be set if there is any flow from an exit to the super sink
+        sink_connections = {(s,d) : 
+            m.addConstr(G[s,d] <= NUM_STARTS * H[s,d])
+            for s in O for d in D}
+            
+        #flow variables can only be set if the connection exists on that edge
+        flow_existence = {(s,ss,e,d):
+            m.addConstr(F[s,ss,e,d] <= (NUM_STARTS * Y[s,ss,e,d]))
+            if ss > s else #ss > s if the row or col is greater in ss (i.e moving right or down) by tuple comparison
+            m.addConstr(F[s,ss,e,d] <= (NUM_STARTS * Y[ss,s,e,d]))
+            for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+            
+        #transfer flow existence, if the piece played is a junction, we can flow between highways and railways on that square
+        transfer_flow = {(s,e,d):
+            m.addConstr(FF[s,e,d] <= NUM_STARTS * quicksum(X[t,s,c] for t in T if t.get_piece() in SWITCH_PIECES for c in prefixes(d)))
+            for s in I for e in E for d in D}
+            
+        #add a bonus point if there is only one connection to the super sink (all exits connected)
+        bonus_point = {d :
+            m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum((1 - H[s,d]) for s in O))
+            for d in D}
         
         
         #SCORING CONSTRAINTS
+        #calculate the score for each full scenario, use a <= because the optimisation will force equality where important
         scoring = {d :
-            m.addConstr(Alpha[d] == quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
-                                  + quicksum(2*Y[s,ss,e,dd] for (s,ss,e,dd) in Y if dd == d and s in I and ss in I)
+            m.addConstr(Alpha[d] <= quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
+                                  + 48 - 4 * quicksum(H[s,d] for s in O) #join cluster points
+                                  + J[d] #bonus point
+                                  - quicksum(X[t,s,c] * t.loose_ends(s) for t in T for s in I for c in prefixes(d)) #subtraction for the number of loose ends (start of penalty calculation)
+                                  + quicksum(2*Y[s,ss,e,dd] for (s,ss,e,dd) in Y if dd == d and s in I and ss in I) #these points are not lost if there is a join on that edge
             )
             for d in D}
             
@@ -209,6 +251,23 @@ class RailroadInkSolver:
         m.optimize()
 
         self._print_result(m, X, C)
+        
+        #print the results to a CSV
+        if resultsFile != None:
+            with open(resultsFile, mode="w", newline="") as csv_file:
+                csv_writer = csv.writer(csv_file, delimiter=",")
+                csv_writer.writerow(["Turn {0}".format(self._turn + i) for i in range(len(self._dice_rolls))] + 
+                                     ["Score", "Connecting Exits", "Centre Points", "Errors", "Bonus Point"])
+                for d in D:
+                    score = round(Alpha[d].x)
+                    centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)))
+                    connecting_exits = round(48 - 4 * sum(H[s,d].x for s in O))
+                    bonus_point = round(J[d].x)
+                    errors = round(-1* sum(X[t,s,c].x * t.loose_ends(s) for t in T for s in I for c in prefixes(d))
+                                  + sum(2*Y[s,ss,e,dd].x for (s,ss,e,dd) in Y if dd == d and s in I and ss in I))
+                    csv_writer.writerow([turn for turn in d] + [score, connecting_exits, centre_points, errors, bonus_point])
+                    
+                
  
     """
     print the board with the solution attached
@@ -217,7 +276,6 @@ class RailroadInkSolver:
         #find all the pieces and placements that we made and add them to the board
         for t, s, c in X:
             if c != tuple() and X[t,s,c].x > 0.9:
-                print(t,s,c)
                 self._board.add_tile(t, s, self._turn - 1 + len(c))
         #then do a super fancy board print showing the exact solution
         self._board.fancy_board_print()
@@ -226,4 +284,4 @@ if __name__ == "__main__":
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve()
+    s.solve(resultsFile="results.csv")
