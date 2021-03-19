@@ -437,11 +437,14 @@ class Board:
                 if self._board[row][col].get_piece() != Piece.BLANK:
                     piece_image = self._board[row][col].get_image()
                     im.paste(piece_image, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
-                    if row in range(2,5) and col in range(2,5):
-                        solution_overlay = Image.new("RGB", (SQUARE_WIDTH//4, SQUARE_HEIGHT//4), color="orange")
-                        im.paste(solution_overlay, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS + 3*SQUARE_WIDTH//4, 
-                                                    TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS + 3*SQUARE_WIDTH//4))                   
-                    
+                    #solution_overlay = Image.new("RGB", (SQUARE_WIDTH//4, SQUARE_HEIGHT//4), color="red")
+                    #im.paste(solution_overlay, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS + 3 * SQUARE_WIDTH//8, 
+                    #                    TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS + 3*SQUARE_WIDTH//8))
+#                    if row in range(2,5) and col in range(2,5):
+#                        solution_overlay = Image.new("RGB", (SQUARE_WIDTH//4, SQUARE_HEIGHT//4), color="orange")
+#                        im.paste(solution_overlay, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS + 3*SQUARE_WIDTH//4, 
+#                                                    TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS + 3*SQUARE_WIDTH//4))                   
+#                    
         
         #now if we are displaying the free squares, do so
         if show_free_squares:
@@ -453,6 +456,13 @@ class Board:
                 im.paste(square_im, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS + SQUARE_WIDTH//4, 
                                      TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS + SQUARE_HEIGHT//4))
         
+#        for row in range(NUM_ROWS):
+#            for col in range(NUM_COLS):
+#                solution_overlay = Image.new("RGB", (SQUARE_WIDTH//4, SQUARE_HEIGHT//4), color="red")
+#                im.paste(solution_overlay, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS + 3 * SQUARE_WIDTH//8, 
+#                                        TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS + 3*SQUARE_WIDTH//8))
+#        
+        """
         for row, col, in [(1, 3), (2, 5), (4, 4), (4, 5), (2, 3), (3, 5), (4, 3), (2, 4)]:
             solution_overlay = Image.new("RGB", (SQUARE_WIDTH//4, SQUARE_HEIGHT//4), color="blue")
             im.paste(solution_overlay, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS , 
@@ -480,7 +490,7 @@ class Board:
                         im.paste(solution_overlay, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS + 3*SQUARE_HEIGHT//4, 
                                             TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
                 count += 1
-        
+        """
         
         #now display the image, depending on if a file is given
         if file == None:
@@ -1109,7 +1119,7 @@ if __name__ == "__main__":
 
     board = rulebook_game()
     board.find_clusters()
-    board.fancy_board_print(file="base-example.png")
+    board.fancy_board_print(file="clean-base.png")
 
     #clusters = board.find_clusters()
     #for cluster in clusters:
