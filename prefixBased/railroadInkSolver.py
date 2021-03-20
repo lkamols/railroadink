@@ -305,6 +305,7 @@ class RailroadInkSolver:
         m._dice_rolls = self._dice_rolls
         m._I = I
         m._S = S
+        m._T = T
         m._board = self._board
         #optimize
         m.optimize(callback)
@@ -370,6 +371,30 @@ def find_missing_pieces(playedTiles, expectedPieceCounts):
     return missingPieces
 
 """
+returns True if the placement of tile at square s is a valid move on the board,
+i.e connects to an existing piece without any clashes
+"""
+def valid_placement(model, board, tile, s):
+    #a placement is valid if there is any connection to another piece and no invalid connections
+    connections = 0
+    clashed = False
+    for side in Side:
+        newEdgeType = tile.get_edge_type_on_side(side)
+        #check if that side is blank
+        if newEdgeType != EdgeType.B:
+            #get the opposite side
+            oppS, oppSide = Board.opposite_edge(s,side)
+            #now check if the opposite side exists and if there is a connection or a clash there
+            if oppS in model._S:
+                existingEdgeType = board.get_tile_at(oppS).get_edge_type_on_side(oppSide)
+                if existingEdgeType == newEdgeType:
+                    connections += 1
+                elif existingEdgeType == EdgeType.clash_type(newEdgeType):
+                    return False #there is a clash, we cannot play this piece here
+    return (connections > 0) #we can play a piece if there was at least one connection, otherwise we can't
+
+
+"""
 returns True if one of the missingPieces can be played on the board, False if they cannot
 """
 def can_place_a_missing_piece(model, board, missingPieces):
@@ -381,26 +406,9 @@ def can_place_a_missing_piece(model, board, missingPieces):
             if board.is_square_free(s):
                 #check every variation of the tile
                 for tile in variations:
-                    #a placement is valid if there is any connection to another piece and no invalid connections
-                    connections = 0
-                    clashed = False
-                    for side in Side:
-                        newEdgeType = tile.get_edge_type_on_side(side)
-                        #check if that side is blank
-                        if newEdgeType != EdgeType.B:
-                            #get the opposite side
-                            oppS, oppSide = Board.opposite_edge(s,side)
-                            #now check if the opposite side exists and if there is a connection or a clash there
-                            if oppS in model._S:
-                                existingEdgeType = board.get_tile_at(oppS).get_edge_type_on_side(oppSide)
-                                if existingEdgeType == newEdgeType:
-                                    connections += 1
-                                elif existingEdgeType == EdgeType.clash_type(newEdgeType):
-                                    clashed = True
-                                    break #we have to reject this solution
-                    if connections > 0 and clashed == False:
-                        #we have found a valid placement of a missing piece
-                        return True
+                    #if this placement is valid, then there is a valid placement
+                    if valid_placement(model, board, tile, s):
+                        return True           
     return False #we found no placement for any missing piece
 
 """
@@ -409,6 +417,9 @@ this is a recursive function, if the checks for one step of the scenario pass, t
 that scenario
 """        
 def lazy_checks(model, board, scenario, XV):
+    
+    X = model._X #retrieve the X variables
+    
     #find the pieces that need to be played in this scenario and the corresponding tiles
     pieceCounts = model._dice_rolls[len(scenario)-1][scenario[-1]].get_dice()
     tilesToCheck = []
@@ -423,26 +434,65 @@ def lazy_checks(model, board, scenario, XV):
         for tile in tilesToCheck:
             if XV[tile,s,scenario] > 0.9:
                 playedTiles += [(tile,s)]
-    
-    #add these played tiles to the board temporarily
-    for tile, square in playedTiles:
-        board.add_tile(tile, square)
-    
-    missingPieces = find_missing_pieces(playedTiles, pieceCounts)
-    
-    canPlaceMissingPiece = can_place_a_missing_piece(model, board, missingPieces)
-    if canPlaceMissingPiece:
-        X = model._X #retrieve the X variables
-        model.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in playedTiles) #we can move an already played tile
-                        + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) for s in model._I) #play a missing piece
-                        + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in model._I) 
-                                if not board.all_specials_used() else 0)) #play a special piece
-     
-    #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
-    if not canPlaceMissingPiece and len(scenario) < len(model._dice_rolls):
-        for nextRoll in range(len(model._dice_rolls[len(scenario)])):
-            lazy_checks(model, board, scenario + (nextRoll,), XV)
+                
+    #check if the played tiles are valid placements, i.e have connections to the board
+    tilesToAdd = list(playedTiles) #copy the played tiles to a list for adding to the board
+    #iterate through the list of played tiles, adding any connecting to the board to the board,
+    #iterate until there is a run where no tiles are added
+    anyAdds = True
+    while anyAdds:
+        anyAdds = False
+        i = 0 #use an indexed while loop instead of a for loop since we are removing elements
+        while i < len(tilesToAdd):
+            tile, s = tilesToAdd[i]
+            if valid_placement(model, board, tile, s):
+                #if this is a valid placement on the board, add it to the board and remove it from the 
+                #list of tiles we need to add
+                board.add_tile(tile, s)
+                tilesToAdd.pop(i)
+                anyAdds = True 
+            else:
+                i += 1
+                
+    #if not all of the tiles were added, it means there were some isolated placements
+    if len(tilesToAdd) != 0:
+        #there were some isolated placements, these must be removed
+        #either by removing one of the isolated placements 
+        #or by placing a piece connecting to them
+        isolatedSquares = [s for (tile,s) in tilesToAdd]
         
+        #look for any square-side-edgeType combinations that could be used to save it
+        connectionPoints = []
+        for tile, square in tilesToAdd:
+            for side in Side:
+                if tile.get_edge_type_on_side(side) != EdgeType.B:
+                    oppS, oppSide = Board.opposite_edge(square, side)
+                    #if the opposite side could have a rail-highway connection and isn't one of the isolated squares
+                    #then add it as a potential location to connect to
+                    if oppS in model._S and oppS not in isolatedSquares:
+                        connectionPoints += [(oppS, oppSide, tile.get_edge_type_on_side(side))]
+        
+        model.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in tilesToAdd) #can remove an isolated tile
+                        + quicksum(X[t,s,c] for (s, side, edgeType) in connectionPoints  #all connection pieces on any prior scenario
+                                            for c in prefixes(scenario) if c != tuple()
+                                            for t in model._T if t.get_edge_type_on_side(side) == edgeType))
+    else:
+        #only consider the missing piece problem if there are no isolated pieces
+        #if there were no isolated pieces, then all pieces were added to the board in the earlier process
+        missingPieces = find_missing_pieces(playedTiles, pieceCounts)
+        
+        canPlaceMissingPiece = can_place_a_missing_piece(model, board, missingPieces)
+        if canPlaceMissingPiece:
+            model.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in playedTiles) #we can move an already played tile
+                            + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) for s in model._I) #play a missing piece
+                            + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in model._I) 
+                                    if not board.all_specials_used() else 0)) #play a special piece
+         
+        #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
+        if not canPlaceMissingPiece and len(scenario) < len(model._dice_rolls):
+            for nextRoll in range(len(model._dice_rolls[len(scenario)])):
+                lazy_checks(model, board, scenario + (nextRoll,), XV)
+            
     #remove the tiles from the board
     for tile, square in playedTiles:
         board.remove_tile(square)
