@@ -437,7 +437,11 @@ def lazy_checks(model, board, scenario, XV):
                         + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) for s in model._I) #play a missing piece
                         + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in model._I) 
                                 if not board.all_specials_used() else 0)) #play a special piece
-        
+     
+    #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
+    if not canPlaceMissingPiece and len(scenario) < len(model._dice_rolls):
+        for nextRoll in range(len(model._dice_rolls[len(scenario)])):
+            lazy_checks(model, board, scenario + (nextRoll,), XV)
         
     #remove the tiles from the board
     for tile, square in playedTiles:
