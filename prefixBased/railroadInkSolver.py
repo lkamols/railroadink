@@ -136,7 +136,7 @@ class RailroadInkSolver:
         #on every turn, in every scenario, we can only use the moves that are allocated
         use_pieces = {(p,c) : 
             m.addConstr(quicksum(X[t,s,c] for s in S if self._board.is_square_free(s)
-                                 for t in Tile.get_variations(p)) == 
+                                 for t in Tile.get_variations(p)) <= 
                         (self._dice_rolls[len(c) - 1][c[-1]].get_dice().get(p, 0))) 
                         #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
             for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
@@ -192,6 +192,18 @@ class RailroadInkSolver:
                               quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)) +
                               quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
             for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+            
+        #there must be a connection to a piece played earlier or on this turn
+        earlier_move_connection = {(t,s,c) :
+            m.addConstr(X[t,s,c] <= (quicksum(X[tt,(s[0],s[1]-1),cc] for tt in T if tt.get_edge_type_on_side(Side.RIGHT) == t.get_edge_type_on_side(Side.LEFT) for cc in prefixes(c)) 
+                                            if (t.get_edge_type_on_side(Side.LEFT) != EdgeType.B and (s[0],s[1]-1) in S) else 0) +
+                                     (quicksum(X[tt,(s[0],s[1]+1),cc] for tt in T if tt.get_edge_type_on_side(Side.LEFT) == t.get_edge_type_on_side(Side.RIGHT) for cc in prefixes(c)) 
+                                            if (t.get_edge_type_on_side(Side.RIGHT) != EdgeType.B and (s[0],s[1]+1) in S) else 0) + 
+                                     (quicksum(X[tt,(s[0]-1,s[1]),cc] for tt in T if tt.get_edge_type_on_side(Side.BOTTOM) == t.get_edge_type_on_side(Side.TOP) for cc in prefixes(c)) 
+                                            if (t.get_edge_type_on_side(Side.TOP) != EdgeType.B and (s[0]-1,s[1]) in S) else 0) + 
+                                     (quicksum(X[tt,(s[0]+1,s[1]),cc] for tt in T if tt.get_edge_type_on_side(Side.TOP) == t.get_edge_type_on_side(Side.BOTTOM) for cc in prefixes(c)) 
+                                            if (t.get_edge_type_on_side(Side.BOTTOM) != EdgeType.B and (s[0]+1,s[1]) in S) else 0))
+            for t in T for s in S for c in C if c != tuple()}
         
             
         #JOINING CONSTRAINTS    
@@ -280,10 +292,22 @@ class RailroadInkSolver:
             )
             for d in D}
             
-        m.setObjective(quicksum(Alpha[d] for d in D), GRB.MAXIMIZE)
+        if self._objective == "expected-score":
+            m.setObjective(quicksum(Alpha[d] for d in D), GRB.MAXIMIZE)
             
+            
+        #set up requirements for the use of lazy constraints
+        m.setParam('MIPGap', 0)
+        m.setParam('LazyConstraints', 1)
+        
+        #anything that is needed in the callback needs to be added to the model
+        m._X = X 
+        m._dice_rolls = self._dice_rolls
+        m._I = I
+        m._S = S
+        m._board = self._board
         #optimize
-        m.optimize()
+        m.optimize(callback)
 
         self._print_result(m, X, C)
         
@@ -318,8 +342,115 @@ class RailroadInkSolver:
         #then do a super fancy board print showing the exact solution
         self._board.fancy_board_print()
         
+"""
+The callback used in the Railroad Ink solver
+"""    
+def callback(model, where):
+    if where == GRB.Callback.MIPSOL:
+        #get the X values in the solution
+        XV = {k : v for (k,v) in zip(model._X.keys(), model.cbGetSolution(list(model._X.values())))}
+        #run the lazy checks for every first dice roll considered
+        for first_dice_roll in range(len(model._dice_rolls[0])):
+            lazy_checks(model, model._board, (first_dice_roll,), XV)
+        
+"""
+find the pieces that are missing given the played tiles and the expected count for pieces
+"""
+def find_missing_pieces(playedTiles, expectedPieceCounts):
+    #next check using the played tiles that enough have been played
+    answerCounts = {}
+    for tile, square in playedTiles:
+        answerCounts[tile.get_piece()] = answerCounts.get(tile.get_piece(),0) + 1
+        
+    #check through and ensure enough have been played and track any pieces that are missing
+    missingPieces = []
+    for piece in expectedPieceCounts:
+        if expectedPieceCounts[piece] > answerCounts.get(piece,0):
+            missingPieces += [piece]
+    return missingPieces
+
+"""
+returns True if one of the missingPieces can be played on the board, False if they cannot
+"""
+def can_place_a_missing_piece(model, board, missingPieces):
+    #now for every missing piece, we need to check if there is absolutely anywhere it could go
+    for piece in missingPieces:
+        variations = Tile.get_variations(piece) #get the possible orientations
+        #check to see if there is anywhere this piece could be placed
+        for s in model._I:
+            if board.is_square_free(s):
+                #check every variation of the tile
+                for tile in variations:
+                    #a placement is valid if there is any connection to another piece and no invalid connections
+                    connections = 0
+                    clashed = False
+                    for side in Side:
+                        newEdgeType = tile.get_edge_type_on_side(side)
+                        #check if that side is blank
+                        if newEdgeType != EdgeType.B:
+                            #get the opposite side
+                            oppS, oppSide = Board.opposite_edge(s,side)
+                            #now check if the opposite side exists and if there is a connection or a clash there
+                            if oppS in model._S:
+                                existingEdgeType = board.get_tile_at(oppS).get_edge_type_on_side(oppSide)
+                                if existingEdgeType == newEdgeType:
+                                    connections += 1
+                                elif existingEdgeType == EdgeType.clash_type(newEdgeType):
+                                    clashed = True
+                                    break #we have to reject this solution
+                    if connections > 0 and clashed == False:
+                        #we have found a valid placement of a missing piece
+                        return True
+    return False #we found no placement for any missing piece
+
+"""
+Do the checks for adding lazy constraints,
+this is a recursive function, if the checks for one step of the scenario pass, then it is called for all children of
+that scenario
+"""        
+def lazy_checks(model, board, scenario, XV):
+    #find the pieces that need to be played in this scenario and the corresponding tiles
+    pieceCounts = model._dice_rolls[len(scenario)-1][scenario[-1]].get_dice()
+    tilesToCheck = []
+    for piece in pieceCounts:
+        tilesToCheck += Tile.get_variations(piece)
+    for piece in SPECIAL_PIECES:
+        tilesToCheck += Tile.get_variations(piece)
+    
+    #search through the current solution to see which pieces have been played
+    playedTiles = []
+    for s in model._I:
+        for tile in tilesToCheck:
+            if XV[tile,s,scenario] > 0.9:
+                playedTiles += [(tile,s)]
+    
+    #add these played tiles to the board temporarily
+    for tile, square in playedTiles:
+        board.add_tile(tile, square)
+    
+    missingPieces = find_missing_pieces(playedTiles, pieceCounts)
+    
+    canPlaceMissingPiece = can_place_a_missing_piece(model, board, missingPieces)
+    if canPlaceMissingPiece:
+        X = model._X #retrieve the X variables
+        model.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in playedTiles) #we can move an already played tile
+                        + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) for s in model._I) #play a missing piece
+                        + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in model._I) 
+                                if not board.all_specials_used() else 0)) #play a special piece
+        
+        
+    #remove the tiles from the board
+    for tile, square in playedTiles:
+        board.remove_tile(square)
+    
+        
 if __name__ == "__main__":
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
     s.solve(resultsFile="results.csv")
+    
+#    board = Board()
+#    dice_rolls = rulebook_dice_rolls()
+#    s = RailroadInkSolver(board, 1, dice_rolls + dice_rolls + dice_rolls + dice_rolls + dice_rolls + dice_rolls + dice_rolls, "expected-score")
+#    s.solve(resultsFile="results2.csv")

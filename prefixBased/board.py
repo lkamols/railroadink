@@ -355,14 +355,26 @@ class Board:
             for col in range(NUM_COLS):
                 self._board[row,col] = Tile(Piece.BLANK, Rotation.I)
         self._initialise_start_tiles()
-        self._solution_tiles = []
+        self._special_count = 0 #count the number of special pieces used
       
     """
-    add a tile to the board
+    add a tile to the board at the given square
+    the turn (if important) is given, only don't supply a turn if this is a dummy entry in the callback
     """
-    def add_tile(self, tile, square, turn):
+    def add_tile(self, tile, square, turn=-1):
         self._board[square] = tile
         self._turn[square] = turn
+        if tile.get_piece() in SPECIAL_PIECES:
+            self._special_count += 1
+        
+    """
+    remove the tile at the given square from the board
+    """
+    def remove_tile(self, square):
+        if self._board[square].get_piece() in SPECIAL_PIECES:
+            self._special_count -= 1
+        self._board[square] = Tile(Piece.BLANK, Rotation.I)
+        self._turn.pop(square)
         
     """
     initialise all the start pieces
@@ -413,19 +425,19 @@ class Board:
             im.save(file)
         
     """
-    given a row, col and side, returns a (row, col, side) tuple that is the other side of the same edge.
+    given a square and side, returns a (square, side) tuple that is the other side of the same edge.
     e.g (0,0,RIGHT) shares an edge with (0,1,LEFT)
     """
     @staticmethod
-    def opposite_edge(row, col, side):
+    def opposite_edge(s, side):
         if side == Side.TOP:
-            return row - 1, col, Side.BOTTOM
+            return (s[0] - 1, s[1]), Side.BOTTOM
         elif side == Side.RIGHT:
-            return row, col + 1, Side.LEFT
+            return (s[0], s[1] + 1), Side.LEFT
         elif side == Side.BOTTOM:
-            return row + 1, col, Side.TOP
+            return (s[0] + 1, s[1]), Side.TOP
         elif side == Side.LEFT:
-            return row, col - 1, Side.RIGHT
+            return (s[0], s[1] - 1), Side.RIGHT
         else:
             raise ValueError("cannot take the opposite edge of the given side")
     
@@ -438,13 +450,16 @@ class Board:
         return (s[0] >= 2 and s[0] <= 4 and s[1] >= 2 and s[1] <= 4)
         
     def get_tile_at(self, s):
-        return self._board[s]
+        return self._board.get(s, None)
     
     def get_piece_at(self, s):
         return self._board[s].get_piece()
     
     def is_square_free(self, s):
         return self.get_piece_at(s) == Piece.BLANK
+    
+    def all_specials_used(self):
+        return self._special_count == 3
     
     """
     return all the (r,c) pairs of pieces adjacent to the given square
