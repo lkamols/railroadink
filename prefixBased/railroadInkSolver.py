@@ -56,8 +56,10 @@ class RailroadInkSolver:
     """
     create and solve an IP that gives the solutions to the railroad ink problem
     resultsFile - if not None, will create a csv with information about the problem
+    output - whether to print Gurobi output
+    printing - whether to print the result
     """
-    def solve(self, resultsFile=None):
+    def solve(self, resultsFile=None, output=0, printing=False):
         
         #SETS
         
@@ -295,6 +297,8 @@ class RailroadInkSolver:
         if self._objective == "expected-score":
             m.setObjective(quicksum(Alpha[d] for d in D), GRB.MAXIMIZE)
             
+        m.setParam('OutputFlag', output)
+            
             
         #set up requirements for the use of lazy constraints
         m.setParam('MIPGap', 0)
@@ -310,7 +314,8 @@ class RailroadInkSolver:
         #optimize
         m.optimize(callback)
 
-        self._print_result(m, X, C)
+        if printing:
+            self._print_result(m, X, C)
         
         #print the results to a CSV
         if resultsFile != None:
@@ -329,6 +334,7 @@ class RailroadInkSolver:
                     bonus_point = round(J[d].x)
                     csv_writer.writerow([turn for turn in d] + [score, connecting_exits, longest_railway, 
                                                                 longest_highway, centre_points, errors, bonus_point])
+        return round(m.objVal)
                     
                 
  
@@ -502,7 +508,7 @@ if __name__ == "__main__":
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(resultsFile="results.csv")
+    s.solve(resultsFile="results.csv", output=1, printing=True)
     
 #    board = Board()
 #    dice_rolls = rulebook_dice_rolls()
