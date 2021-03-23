@@ -111,16 +111,19 @@ class RailroadInkSolver:
         
         #LONGEST RAILWAY/HIGHWAY VARIABLES
         #each of these is defined for every single possible set of dice rolls d in D
-        #whether square s is the start square
+        #whether square s is an end square of the path
         K = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D} 
-        #longest path flow from s1 to s2 of type e
-        L = {(s,ss,e,d): m.addVar() for s in I
-                for ss in self._board.adjacents(s, internal=True) for e in E for d in D} 
-        #whether there is any longest path from from s1 to s2 of type E permitted
-        M = {(s,ss,e,d): m.addVar(vtype=GRB.BINARY) for s in I
-                for ss in self._board.adjacents(s, internal=True) for e in E for d in D} 
+        #whether there is a longest path connection between squares s and ss
+        #define this similarly to the Y variables in that two references to the same variable exist
+        L = {}
+        for s in I:
+            for e in E:
+                for d in D:
+                    for ss in self._board.adjacents(s, forward = True, internal=True):
+                        L[s,ss,e,d] = m.addVar(vtype=GRB.BINARY)
+                        L[ss,s,e,d] = L[s,ss,e,d]
         #whether square s counts towards the "e" longest road
-        N = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
+        M = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
         
         #SCORING VARIABLES
         #the score for every final scenario
@@ -254,42 +257,32 @@ class RailroadInkSolver:
             
         #LONGEST RAILWAY/HIGHWAY CONSTRAINTS
         #these are only calculated for the full scenarios
-        #there can only be one start square for both the highway and railway
-        one_start = {(e,d) :
-            m.addConstr(quicksum(K[s,e,d] for s in I) == 1)
+        two_ends = {(e,d) :
+            m.addConstr(quicksum(K[s,e,d] for s in I) == 2)
             for e in E for d in D}
             
-        #we can only let a longest path travel on an edge which is connected
-        #flow variables can only be set if the connection exists on that edge
-        path_flow_existence = {(s,ss,e,d):
-            m.addConstr(M[s,ss,e,d] <= Y[s,ss,e,d])
-            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}   
-            
-        #the inflow of the longest path must be greater than the outflow of the longest path
-        #the scoring component saps from the flow in order to score, preventing cycles
-        #the start piece is not bound by the inflow
-        path_flow = {(s,e,d) :
-            m.addConstr(quicksum(L[ss,s,e,d] for ss in self._board.adjacents(s, internal=True)) + LONGEST_POSSIBLE_PATH * K[s,e,d] >=
-                        quicksum(L[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)) + N[s,e,d])
+        #an edge can only score points if it is a start square and has one out connection or has two directional connections
+        inflow = {(s,e,d) :
+            m.addConstr(2*M[s,e,d] == K[s,e,d] + quicksum(L[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)))
             for s in I for e in E for d in D}
             
-        #to restrict the longest pathway to not branch, we use the C variables, only allow flow if it is permitted by the C variables
-        no_branching = {(s,ss,e,d) :
-            m.addConstr(L[s,ss,e,d] <= LONGEST_POSSIBLE_PATH * M[s,ss,e,d])
-            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
-            
-        #only let one C variable be set outflowing from any given square, to prevent branching
-        one_outflow_per_square = {(s,e,d) :
-            m.addConstr(quicksum(M[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)) <= 1)
-            for s in I for e in E for d in D}
+        #there can only be flow on edges that have a connection of that type
+        only_on_connected_edges = {(s,ss,e,d) :
+            m.addConstr(L[s,ss,e,d] <= Y[s,ss,e,d])
+            for s in I for ss in self._board.adjacents(s, internal=True, forward=True) for e in E for d in D}
         
+        #don't set a start location and not have it scoring, this may be redundant with the two_ends equality
+        end_bounds = {(s,e,d) :
+            m.addConstr(K[s,e,d] <= M[s,e,d])
+            for s in I for e in E for d in D}
+            
         #SCORING CONSTRAINTS
         #calculate the score for each full scenario, use a <= because the optimisation will force equality where important
         scoring = {d :
             m.addConstr(Alpha[d] <= quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
                                   + 48 - 4 * quicksum(H[s,d] for s in O) #join cluster points
                                   + J[d] #bonus point
-                                  + quicksum(N[s,e,d] for s in I for e in E) #longest path points
+                                  + quicksum(M[s,e,d] for s in I for e in E) #longest path points
                                   - quicksum(X[t,s,c] * t.loose_ends(s) for t in T for s in I for c in prefixes(d)) #subtraction for the number of loose ends (start of penalty calculation)
                                   + quicksum(Y[s,ss,e,dd] for (s,ss,e,dd) in Y if dd == d and s in I and ss in I) #these points are not lost if there is a join on that edge
             )
@@ -328,8 +321,8 @@ class RailroadInkSolver:
                     score = round(Alpha[d].x)
                     centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)))
                     connecting_exits = round(48 - 4 * sum(H[s,d].x for s in O))
-                    longest_railway = round(sum(N[s,EdgeType.R,d].x for s in I))
-                    longest_highway = round(sum(N[s,EdgeType.H,d].x for s in I))
+                    longest_railway = round(sum(M[s,EdgeType.R,d].x for s in I))
+                    longest_highway = round(sum(M[s,EdgeType.H,d].x for s in I))
                     errors = round(-1* sum(X[t,s,c].x * t.loose_ends(s) for t in T for s in I for c in prefixes(d))
                                   + sum(Y[s,ss,e,dd].x for (s,ss,e,dd) in Y if dd == d and s in I and ss in I))
                     bonus_point = round(J[d].x)
