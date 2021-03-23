@@ -87,6 +87,13 @@ class RailroadInkSolver:
         #these variables are only calculated at the end of the scenarios, not during
         Y = {(s,ss,e,d) : m.addVar(vtype=GRB.BINARY) 
                 for s in S for ss in self._board.adjacents(s, forward=True) for e in E for d in D}
+        #for ease, create entries in the opposite direction that point to the same variables
+        #e.g Y[s,ss,e,d] = Y[ss,s,e,d] for all values
+        for s in S:
+            for e in E:
+                for d in D:
+                    for ss in self._board.adjacents(s, forward = True):
+                        Y[ss,s,e,d] = Y[s,ss,e,d]
         
         #CONNECTING START POINTS VARIABLES
         #each of these is defined for every single possible set of dice rolls d in D
@@ -233,8 +240,6 @@ class RailroadInkSolver:
         #flow variables can only be set if the connection exists on that edge
         flow_existence = {(s,ss,e,d):
             m.addConstr(F[s,ss,e,d] <= (NUM_STARTS * Y[s,ss,e,d]))
-            if ss > s else #ss > s if the row or col is greater in ss (i.e moving right or down) by tuple comparison
-            m.addConstr(F[s,ss,e,d] <= (NUM_STARTS * Y[ss,s,e,d]))
             for s in S for ss in self._board.adjacents(s) for e in E for d in D}
             
         #transfer flow existence, if the piece played is a junction, we can flow between highways and railways on that square
@@ -259,8 +264,6 @@ class RailroadInkSolver:
         #flow variables can only be set if the connection exists on that edge
         path_flow_existence = {(s,ss,e,d):
             m.addConstr(M[s,ss,e,d] <= Y[s,ss,e,d])
-            if ss > s else
-            m.addConstr(M[s,ss,e,d] <= Y[ss,s,e,d])
             for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}   
             
         #the inflow of the longest path must be greater than the outflow of the longest path
@@ -290,7 +293,7 @@ class RailroadInkSolver:
                                   + J[d] #bonus point
                                   + quicksum(N[s,e,d] for s in I for e in E) #longest path points
                                   - quicksum(X[t,s,c] * t.loose_ends(s) for t in T for s in I for c in prefixes(d)) #subtraction for the number of loose ends (start of penalty calculation)
-                                  + quicksum(2*Y[s,ss,e,dd] for (s,ss,e,dd) in Y if dd == d and s in I and ss in I) #these points are not lost if there is a join on that edge
+                                  + quicksum(Y[s,ss,e,dd] for (s,ss,e,dd) in Y if dd == d and s in I and ss in I) #these points are not lost if there is a join on that edge
             )
             for d in D}
             
@@ -330,7 +333,7 @@ class RailroadInkSolver:
                     longest_railway = round(sum(N[s,EdgeType.R,d].x for s in I))
                     longest_highway = round(sum(N[s,EdgeType.H,d].x for s in I))
                     errors = round(-1* sum(X[t,s,c].x * t.loose_ends(s) for t in T for s in I for c in prefixes(d))
-                                  + sum(2*Y[s,ss,e,dd].x for (s,ss,e,dd) in Y if dd == d and s in I and ss in I))
+                                  + sum(Y[s,ss,e,dd].x for (s,ss,e,dd) in Y if dd == d and s in I and ss in I))
                     bonus_point = round(J[d].x)
                     csv_writer.writerow([turn for turn in d] + [score, connecting_exits, longest_railway, 
                                                                 longest_highway, centre_points, errors, bonus_point])
