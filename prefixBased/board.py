@@ -374,7 +374,8 @@ class Board:
         if self._board[square].get_piece() in SPECIAL_PIECES:
             self._special_count -= 1
         self._board[square] = Tile(Piece.BLANK, Rotation.I)
-        self._turn.pop(square)
+        if square in self._turn:
+            self._turn.pop(square)
         
     """
     initialise all the start pieces
@@ -538,11 +539,6 @@ if __name__ == "__main__":
 
     board = rulebook_game()
     board.fancy_board_print()
-#    img = Image.new('RGB', (100, 30), color = (73, 109, 137))
-# 
-#    fnt = ImageFont.truetype('arial.ttf', 30)
-#    d = ImageDraw.Draw(img)
-#    d.text((10,10), "Hello world", font=fnt, fill=(255, 255, 0))
-#     
-#    img.show()
+    
+    
     
