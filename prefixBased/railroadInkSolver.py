@@ -85,14 +85,14 @@ class RailroadInkSolver:
         X = {(t,s,c) : m.addVar(vtype=GRB.BINARY) for t in T for s in S for c in C}
         #y variables for whether there is a link between adjacent squares with edge type e with dice rolls d
         #these variables are only calculated at the end of the scenarios, not during
-        Y = {(s,ss,e,d) : m.addVar(vtype=GRB.BINARY) 
-                for s in S for ss in self._board.adjacents(s, forward=True) for e in E for d in D}
         #for ease, create entries in the opposite direction that point to the same variables
         #e.g Y[s,ss,e,d] = Y[ss,s,e,d] for all values
+        Y = {}
         for s in S:
             for e in E:
                 for d in D:
                     for ss in self._board.adjacents(s, forward = True):
+                        Y[s,ss,e,d] = m.addVar(vtype=GRB.BINARY)
                         Y[ss,s,e,d] = Y[s,ss,e,d]
         
         #CONNECTING START POINTS VARIABLES
@@ -254,7 +254,6 @@ class RailroadInkSolver:
             
         #LONGEST RAILWAY/HIGHWAY CONSTRAINTS
         #these are only calculated for the full scenarios
-        
         #there can only be one start square for both the highway and railway
         one_start = {(e,d) :
             m.addConstr(quicksum(K[s,e,d] for s in I) == 1)
@@ -283,7 +282,6 @@ class RailroadInkSolver:
         one_outflow_per_square = {(s,e,d) :
             m.addConstr(quicksum(M[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)) <= 1)
             for s in I for e in E for d in D}
-        
         
         #SCORING CONSTRAINTS
         #calculate the score for each full scenario, use a <= because the optimisation will force equality where important
