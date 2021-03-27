@@ -461,6 +461,7 @@ def lazy_checks(model, board, scenario, XV):
                 i += 1
                 
     #if not all of the tiles were added, it means there were some isolated placements
+    isolatedSquareConstraintsAdded = False
     if len(tilesToAdd) != 0:
         #there were some isolated placements, these must be removed
         #either by removing one of the isolated placements 
@@ -482,23 +483,29 @@ def lazy_checks(model, board, scenario, XV):
                         + quicksum(X[t,s,c] for (s, side, edgeType) in connectionPoints  #all connection pieces on any prior scenario
                                             for c in prefixes(scenario) if c != tuple()
                                             for t in model._T if t.get_edge_type_on_side(side) == edgeType))
-    else:
-        #only consider the missing piece problem if there are no isolated pieces
-        #if there were no isolated pieces, then all pieces were added to the board in the earlier process
-        missingPieces = find_missing_pieces(playedTiles, pieceCounts)
+        #then add these to the board when checking for if pieces are missing
+        for tile, s in tilesToAdd:
+            board.add_tile(tile, s)
+        #set a flag for if there were isolated placements
+        isolatedSquareConstraintsAdded = True
         
-        canPlaceMissingPiece = can_place_a_missing_piece(model, board, missingPieces)
-        if canPlaceMissingPiece:
-            model.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in playedTiles) #we can move an already played tile
-                            + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) for s in model._I) #play a missing piece
-                            + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in model._I) 
-                                    if not board.all_specials_used() else 0)) #play a special piece
-         
-        #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
-        if not canPlaceMissingPiece and len(scenario) < len(model._dice_rolls):
-            for nextRoll in range(len(model._dice_rolls[len(scenario)])):
-                lazy_checks(model, board, scenario + (nextRoll,), XV)
-            
+    
+    
+    #if there were no isolated pieces, then all pieces were added to the board in the earlier process
+    missingPieces = find_missing_pieces(playedTiles, pieceCounts)
+    
+    canPlaceMissingPiece = can_place_a_missing_piece(model, board, missingPieces)
+    if canPlaceMissingPiece:
+        model.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in playedTiles) #we can move an already played tile
+                        + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) for s in model._I) #play a missing piece
+                        + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in model._I) 
+                                if not board.all_specials_used() else 0)) #play a special piece
+     
+    #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
+    if not canPlaceMissingPiece and not isolatedSquareConstraintsAdded and len(scenario) < len(model._dice_rolls):
+        for nextRoll in range(len(model._dice_rolls[len(scenario)])):
+            lazy_checks(model, board, scenario + (nextRoll,), XV)
+        
     #remove the tiles from the board
     for tile, square in playedTiles:
         board.remove_tile(square)
