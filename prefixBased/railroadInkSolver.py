@@ -270,7 +270,14 @@ class RailroadInkSolver:
         only_on_connected_edges = {(s,ss,e,d) :
             m.addConstr(L[s,ss,e,d] <= Y[s,ss,e,d])
             for s in I for ss in self._board.adjacents(s, internal=True, forward=True) for e in E for d in D}
-        
+
+        #this formulation allows for completely separate loops, handle removal in lazy constraints
+        #except for basic size 4 loops, add all of those at the start because they are likely to get added
+        no_size_4_loops = {((r,c),e,d) :
+            m.addConstr(L[(r,c),(r,c+1),e,d] + L[(r,c),(r+1,c),e,d] +
+                        L[(r,c+1),(r+1,c+1),e,d] + L[(r+1,c),(r+1,c+1),e,d] <= 3)
+            for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}
+            
         #don't set a start location and not have it scoring, this may be redundant with the two_ends equality
         end_bounds = {(s,e,d) :
             m.addConstr(K[s,e,d] <= M[s,e,d])
