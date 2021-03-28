@@ -411,9 +411,6 @@ class Board:
                     fnt = ImageFont.truetype("arial.ttf", 22)
                     d.text((5,0), str(self._turn[row,col]), font=fnt, fill=(0,0,0))
                     piece_image.paste(txt, (piece_image.size[1]*3//4, 0))
-                    
-                    
-                    
                     im.paste(piece_image, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
 
 
@@ -473,7 +470,7 @@ class Board:
             directions += [(-1,0),(0,-1)]
         if internal:
             return [(s[0]+dr,s[1]+dc) for (dr,dc) in directions
-                    if s[0]+dr >= 0 and s[0]+dr < NUM_ROWS and s[1]+dc >= 0 and s[1]+dc < NUM_COLS]
+                    if Board.square_internal(s[0]+dr, s[1]+dc)]
         else:
             return [(s[0]+dr,s[1]+dc) for (dr,dc) in directions
                 if (s[0]+dr,s[1]+dc) in self._board]
@@ -481,6 +478,10 @@ class Board:
     @staticmethod
     def get_start_squares():
         return {(r,c) for r,c,t in HIGHWAY_START_POSITIONS + RAILWAY_START_POSITIONS}
+    
+    @staticmethod
+    def square_internal(r,c):
+        return r >= 0 and r < NUM_ROWS and c >= 0 and c < NUM_ROWS
     
 
 class DiceRoll:

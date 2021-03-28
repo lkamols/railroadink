@@ -156,8 +156,8 @@ class TestSolver(unittest.TestCase):
         board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,1), 6)
         dice_rolls = [[DiceRoll({Piece.RAILWAY_CORNER : 3, Piece.OVERPASS : 1}, 1)]]
         s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-        result = s.solve(printing=True)
-        self.assertEqual(result, 47)
+        result = s.solve()
+        self.assertEqual(result, 49)
         
         
 if __name__ == "__main__":

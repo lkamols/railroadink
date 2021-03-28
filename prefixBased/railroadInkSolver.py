@@ -2,6 +2,7 @@
 from gurobipy import *
 from board import *
 import csv
+import numpy as np
 
 
 """
@@ -307,10 +308,12 @@ class RailroadInkSolver:
         
         #anything that is needed in the callback needs to be added to the model
         m._X = X 
+        m._L = L
         m._dice_rolls = self._dice_rolls
         m._I = I
         m._S = S
         m._T = T
+        m._E = E
         m._board = self._board
         #optimize
         m.optimize(callback)
@@ -355,11 +358,12 @@ The callback used in the Railroad Ink solver
 """    
 def callback(model, where):
     if where == GRB.Callback.MIPSOL:
-        #get the X values in the solution
+        #get the X and L values in the solution
         XV = {k : v for (k,v) in zip(model._X.keys(), model.cbGetSolution(list(model._X.values())))}
+        LV = {k : v for (k,v) in zip(model._L.keys(), model.cbGetSolution(list(model._L.values())))}
         #run the lazy checks for every first dice roll considered
         for first_dice_roll in range(len(model._dice_rolls[0])):
-            lazy_checks(model, model._board, (first_dice_roll,), XV)
+            lazy_checks(model, model._board, (first_dice_roll,), XV, LV)
         
 """
 find the pieces that are missing given the played tiles and the expected count for pieces
@@ -419,11 +423,47 @@ def can_place_a_missing_piece(model, board, missingPieces):
     return False #we found no placement for any missing piece
 
 """
+determines if there are any loops in this solution and adds lazy constraints if there are any
+d is the scenario of dice rolls we received
+"""
+def add_any_loop_lazy_constraints(model, d, LV):
+    if len(d) == len(model._dice_rolls): #we are on the final roll
+        #use the existing board and check for loops, start by looking for any top left corners, as every loop has to have 
+        #a top left connection both to the right and down from one square
+        for r in range(NUM_ROWS - 1): #cannot have a loop starting in the last row (or col)
+            for c in range(NUM_COLS - 1):
+                for e in model._E:
+                    if LV[(r,c),(r+1,c),e,d] > 0.9 and LV[(r,c),(r,c+1),e,d] > 0.9:
+                        #follow this path for as long as possible, starting going right
+                        current_r = r
+                        current_c = c + 1
+                        previous_dir = (0,1)
+                        squares = [(r,c)] #the list of all squares seen on this path
+                        while True:
+                            squares += [(current_r, current_c)]
+                            if current_r == r and current_c == c: #we have got back to the start, this is a loop
+                                #add a lazy constraint to say that this path cannot be entirely on
+                                model.cbLazy(len(squares) - 2 >= quicksum(model._L[squares[i],squares[i+1],e,d] for i in range(len(squares)-1)))
+                                break #leave the while loop, we have found a loop
+                            #consider all of the directions we could be travelling, it can only be one of these
+                            for (dr,dc) in [(0,1),(1,0),(0,-1),(-1,0)]:
+                                #if we aren't retracing and can continue in the given direction, move that direction
+                                if tuple(np.add(previous_dir, (dr,dc))) != (0,0) and Board.square_internal(current_r + dr, current_c + dc) and \
+                                        LV[(current_r,current_c),(current_r+dr,current_c+dc),e,d] > 0.9:
+                                    current_r += dr
+                                    current_c += dc
+                                    previous_dir = (dr,dc) #track which direction we went last
+                                    break; #we can only move in one direction, breaking also confirms we moved for the else
+                            else: #there was no break, i.e we didn't move anywhere
+                                break #break out of the while loop, we ran into a dead end
+                                
+
+"""
 Do the checks for adding lazy constraints,
 this is a recursive function, if the checks for one step of the scenario pass, then it is called for all children of
 that scenario
 """        
-def lazy_checks(model, board, scenario, XV):
+def lazy_checks(model, board, scenario, XV, LV):
     
     X = model._X #retrieve the X variables
     
@@ -501,11 +541,15 @@ def lazy_checks(model, board, scenario, XV):
                         + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) for s in model._I) #play a missing piece
                         + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in model._I) 
                                 if not board.all_specials_used() else 0)) #play a special piece
+        
+    #finally we also want to check for any loops for longest paths
+    add_any_loop_lazy_constraints(model, scenario, LV)
+
      
     #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
     if not canPlaceMissingPiece and not isolatedSquareConstraintsAdded and len(scenario) < len(model._dice_rolls):
         for nextRoll in range(len(model._dice_rolls[len(scenario)])):
-            lazy_checks(model, board, scenario + (nextRoll,), XV)
+            lazy_checks(model, board, scenario + (nextRoll,), XV, LV)
         
     #remove the tiles from the board
     for tile, square in playedTiles:
@@ -522,3 +566,4 @@ if __name__ == "__main__":
 #    dice_rolls = rulebook_dice_rolls()
 #    s = RailroadInkSolver(board, 1, dice_rolls + dice_rolls + dice_rolls + dice_rolls + dice_rolls + dice_rolls + dice_rolls, "expected-score")
 #    s.solve(resultsFile="results2.csv")
+    
