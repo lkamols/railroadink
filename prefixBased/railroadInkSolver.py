@@ -1,8 +1,11 @@
 
+from gurobipy import Model, GRB, quicksum
 from gurobipy import *
+from board import Board, Tile, Side, EdgeType, NUM_ROWS, NUM_COLS
 from board import *
 import csv
 import numpy as np
+import os
 
 
 """
@@ -58,10 +61,11 @@ class RailroadInkSolver:
     create and solve an IP that gives the solutions to the railroad ink problem
     resultsFile - if not None, will create a csv with information about the problem
     output - whether to print Gurobi output
-    printing - whether to print the result
+    printD - a list of scenarios to print, or "all" if all scenarios should be printed
+    printingFolder - a folder to print to, if not specified, they will all be printed directly
     seed - the seed to use for gurobi
     """
-    def solve(self, resultsFile=None, output=0, printing=False, seed=0):
+    def solve(self, resultsFile=None, output=0, printD=[], printingFolder=None, seed=0):
         
         #SETS
         
@@ -298,7 +302,7 @@ class RailroadInkSolver:
             for d in D}
             
         if self._objective == "expected-score":
-            m.setObjective(quicksum(Alpha[d] for d in D), GRB.MAXIMIZE)
+            m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
             
         m.setParam('OutputFlag', output)
         m.setParam('Seed',seed)
@@ -320,8 +324,10 @@ class RailroadInkSolver:
         #optimize
         m.optimize(callback)
 
-        if printing:
-            self._print_result(m, X, C)
+
+        #do any necessary printing
+        self._print_scenarios(printD, printingFolder, m, X, S, T, D)
+                
         
         #print the results to a CSV
         if resultsFile != None:
@@ -342,18 +348,59 @@ class RailroadInkSolver:
                                                                 longest_highway, centre_points, errors, bonus_point])
         return round(m.objVal)
                     
-                
+       
+    """
+    get the probability of a specific scenario, d
+    """
+    def _scenario_probability(self, d):
+        prob = 1
+        for turn, roll_num in enumerate(d):
+            prob *= self._dice_rolls[turn][roll_num].get_probability()
+        return prob
  
     """
-    print the board with the solution attached
+    prints all scenarios listed in printD, if printD == "all", then prints all scenarios in D
+    prints to printingFolder, unless this is None and prints them without saving
     """
-    def _print_result(self, m, X, C):
+    def _print_scenarios(self, printD, printingFolder, m, X, S, T, D):
+        if printD == "all": #if the argument was "all" then print all scenarios
+            printD = D
+        
+        if printingFolder == None: #print directly without saving
+            for d in printD:
+                self._print_result(m, X, S, T, d) 
+        else:
+            for i in range(100): #honestly if there are 100 folders with this name, failure is deserved
+                try:
+                    #append a folder index, so that if the folder exists, we don't lose everything
+                    if i != 0:
+                        folder = "{0} ({1})".format(printingFolder, i)
+                    else:
+                        folder = printingFolder
+                    os.mkdir(printingFolder)
+                    for d in printD:
+                        self._print_result(m, X, S, T, d, "{0}/solution {1}.png".format(folder, d))
+                    #we successfully did all the printing, break
+                    break
+                except OSError:
+                    pass #it couldn't make the file, try the next value
+    
+    """
+    print the board with the solution attached for a given scenario d
+    """
+    def _print_scenario(self, m, X, S, T, d, file=None):
         #find all the pieces and placements that we made and add them to the board
-        for t, s, c in X:
-            if c != tuple() and X[t,s,c].x > 0.9:
-                self._board.add_tile(t, s, self._turn - 1 + len(c))
+        added_squares = [] #track the squares that were added
+        for s in S:
+            for t in T:
+                if X[t,s,d].x > 0.9:
+                    self._board.add_tile(t, s, self._turn - 1 + len(d))
+                    added_squares += [s]
         #then do a super fancy board print showing the exact solution
-        self._board.fancy_board_print()
+        self._board.fancy_board_print(file)
+        #remove all the squares from the board in case we need to print another situation
+        for s in added_squares:
+            self._board.remove_tile(s)
         
 """
 The callback used in the Railroad Ink solver
@@ -390,7 +437,6 @@ i.e connects to an existing piece without any clashes
 def valid_placement(model, board, tile, s):
     #a placement is valid if there is any connection to another piece and no invalid connections
     connections = 0
-    clashed = False
     for side in Side:
         newEdgeType = tile.get_edge_type_on_side(side)
         #check if that side is blank
@@ -559,15 +605,47 @@ def lazy_checks(model, board, scenario, XV, LV):
     
         
 if __name__ == "__main__":
-    import time
-    t = time.time()
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(resultsFile="results.csv", output=1, printing=True)
+    s.solve(resultsFile="results1.csv", output=1, printD="all", printingFolder="rulebook")
     
 #    board = Board()
 #    dice_rolls = rulebook_dice_rolls()
 #    s = RailroadInkSolver(board, 1, dice_rolls + dice_rolls + dice_rolls + dice_rolls + dice_rolls + dice_rolls + dice_rolls, "expected-score")
 #    s.solve(resultsFile="results2.csv")
+    
+#    board = Board()
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+#    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+#    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+#    
+#    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+#                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
+#                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 0.6),
+#                   DiceRoll({Piece.HIGHWAY_T : 1, Piece.RAILWAY_T : 1,
+#                             Piece.HIGHWAY_CORNER : 1, Piece.STRAIGHT_STATION : 1}, 0.4)]]    
+#   
+#    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
+#    s.solve(resultsFile="results.csv", output=1, printD="all")
     
