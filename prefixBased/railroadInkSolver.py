@@ -368,7 +368,7 @@ class RailroadInkSolver:
         
         if printingFolder == None: #print directly without saving
             for d in printD:
-                self._print_result(m, X, S, T, d) 
+                self._print_scenario(m, X, S, T, d) 
         else:
             for i in range(100): #honestly if there are 100 folders with this name, failure is deserved
                 try:
@@ -377,9 +377,9 @@ class RailroadInkSolver:
                         folder = "{0} ({1})".format(printingFolder, i)
                     else:
                         folder = printingFolder
-                    os.mkdir(printingFolder)
+                    os.mkdir(folder)
                     for d in printD:
-                        self._print_result(m, X, S, T, d, "{0}/solution {1}.png".format(folder, d))
+                        self._print_scenario(m, X, S, T, d, "{0}/solution {1}.png".format(folder, d))
                     #we successfully did all the printing, break
                     break
                 except OSError:

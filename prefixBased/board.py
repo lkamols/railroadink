@@ -396,7 +396,6 @@ class Board:
         board = Image.open(PHOTOS_FOLDER + "board.png")
         im = Image.new('RGB', board.size)
         im.paste(board, (0,0))
-        
 
         #then go through each of the tiles and add them
         for row in range(NUM_ROWS):
