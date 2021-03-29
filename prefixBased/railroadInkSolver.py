@@ -59,8 +59,9 @@ class RailroadInkSolver:
     resultsFile - if not None, will create a csv with information about the problem
     output - whether to print Gurobi output
     printing - whether to print the result
+    seed - the seed to use for gurobi
     """
-    def solve(self, resultsFile=None, output=0, printing=False):
+    def solve(self, resultsFile=None, output=0, printing=False, seed=0):
         
         #SETS
         
@@ -76,7 +77,7 @@ class RailroadInkSolver:
         D = [] #all the final (Last) scenarios / dice rolls
         self._generate_scenarios([], D, C)
         
-        m = Model("railroad-ink") #create the model
+        m = Model("railroad-ink") #create the mode
         
         #BASIC PLACEMENT VARIABLES
         #x variables for whether tile t is placed at square s in the most recent turn of scenario c
@@ -300,6 +301,7 @@ class RailroadInkSolver:
             m.setObjective(quicksum(Alpha[d] for d in D), GRB.MAXIMIZE)
             
         m.setParam('OutputFlag', output)
+        m.setParam('Seed',seed)
             
             
         #set up requirements for the use of lazy constraints
@@ -557,6 +559,8 @@ def lazy_checks(model, board, scenario, XV, LV):
     
         
 if __name__ == "__main__":
+    import time
+    t = time.time()
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")

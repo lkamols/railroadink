@@ -1,6 +1,7 @@
 
 
 import unittest
+import time
 from board import *
 from railroadInkSolver import *
 
@@ -160,8 +161,50 @@ class TestSolver(unittest.TestCase):
         self.assertEqual(result, 49)
         
         
+class TestingSuite:
+    
+    """
+    run a single test, returns whether it was a success, the average, min and max execution time of trials
+    """
+    @staticmethod
+    def run_test(num, board, turn, dice_rolls, objective, expected_answer, trials, seed=None):
+        #update the seed if we are doing a single test
+        if seed != None:
+            random.seed(seed)
+        #create the solver object
+        s = RailroadInkSolver(board, turn, dice_rolls, objective)
+        success = True #whether this run was successful
+        #want the max, min and average execution time
+        time_min = float("inf")
+        time_max = 0
+        time_sum = 0
+        for i in range(trials):
+            trial_seed = random.random()
+            #run the test, wrapped in a timer
+            trial_start = time.time()
+            run_ans = s.solve(seed=trial_seed)
+            trial_time = time.time() - trial_start
+            #now that we have run the trial, check that the correct answer was reached
+            if run_ans != expected_answer:
+                print("FAIL, test", num, "failed with seed", trial_seed, "expected:", expected_answer, "actual:", run_ans)
+                success = False
+            #update the timing information
+            time_min = min(time_min, trial_time)
+            time_max = max(time_max, trial_time)
+            time_sum += trial_time
+        print("Test", num, "PASSED" if success else "FAILED")        
+        return success, time_sum/trials, time_min, time_max
+    
+    @staticmethod
+    def test_rulebook(trials, seed=None):
+        board = rulebook_game()
+        dice_rolls = rulebook_dice_rolls()
+        return TestingSuite.run_test(1, board, 7, dice_rolls, "expected-score", 46, trials, seed)
+        
+
 if __name__ == "__main__":
     #unittest.main(exit=False)
     
-    tester = TestSolver()
-    tester.test_six_loop()
+#    tester = TestSolver()
+#    tester.test_six_loop()
+    print(TestingSuite.test_rulebook(4))
