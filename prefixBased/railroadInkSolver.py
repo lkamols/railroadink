@@ -35,6 +35,10 @@ class RailroadInkSolver:
         self._turn = turn
         self._dice_rolls = dice_rolls
         self._objective = objective
+        self._model = Model("Railroad Ink")
+        
+    def get_model(self):
+        return self._model
     
     """
     generates all possible scenarios using the dice rolls.
@@ -81,7 +85,7 @@ class RailroadInkSolver:
         D = [] #all the final (Last) scenarios / dice rolls
         self._generate_scenarios([], D, C)
         
-        m = Model("railroad-ink") #create the mode
+        m = self._model #get the model so we don't have to repeat self._model a bunch of times
         
         #BASIC PLACEMENT VARIABLES
         #x variables for whether tile t is placed at square s in the most recent turn of scenario c
@@ -105,6 +109,8 @@ class RailroadInkSolver:
         
         #CONNECTING START POINTS VARIABLES
         #each of these is defined for every single possible set of dice rolls d in D
+        #the flow problem is also defined for every start square 'o'
+        #these are all linear variables since we start with only 1 as an input
         #the flow of joins between two adjacent squares
         F = {(s,ss,o,e,d): m.addVar() for s in S 
                 for ss in self._board.adjacents(s) for o in O for e in E for d in D}
@@ -248,6 +254,7 @@ class RailroadInkSolver:
             
         #JOINING CONSTRAINTS    
         #these are all done for only the complete dice rolls, so for d in D
+        #the internal constraints also exist for every possible origin square o in O
         
         #the flow into an internal square must be the same as the flow out
         internal_flows = {(s,o,e,d) :
@@ -256,7 +263,7 @@ class RailroadInkSolver:
             for s in I for o in O for e in E for d in D}
             
         #the flow into an external square must be the same as the flow out
-        #these have a guaranteed flow in of 1 as start squares
+        #these have a guaranteed flow in of 1 when we are at the origin of this flow problem o
         #they also have the ability to flow out to the sink with variable G
         external_flows = {(s,o,d) :
             m.addConstr((1 if s == o else 0) + quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s) for e in E) ==
@@ -273,10 +280,16 @@ class RailroadInkSolver:
             m.addConstr(FF[s,o,e,d] <= quicksum(X[t,s,c] for t in T if t.get_piece() in SWITCH_PIECES for c in prefixes(d)))
             for s in I for o in O for e in E for d in D}
             
-        #no duals
-        no_bidirectional = {(s,o,d) :
+        #only allow flow in one direction between every pair of exits
+        unidrectional_flow = {(s,o,d) :
             m.addConstr(G[s,o,d] == 0)
             for s in O for o in O if s < o for d in D}
+            
+        #this is a redundant constraint, but might help simplify things a bit
+        #basically saying don't look around to flow into 2 places, it's impossible
+        one_outflow = {(o,d):
+            m.addConstr(quicksum(G[s,o,d] for s in O) == 1)
+            for o in O for d in D}
             
         
             

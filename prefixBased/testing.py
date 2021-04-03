@@ -50,18 +50,15 @@ class TestingSuite:
         time_sum = 0
         for i in range(trials):
             trial_seed = random.randrange(1000000)
-            #run the test, wrapped in a timer
-            trial_start = time.time()
             run_ans = s.solve(seed=trial_seed)
-            trial_time = time.time() - trial_start
             #now that we have run the trial, check that the correct answer was reached
             if run_ans != expected_answer:
                 print(name, "FAILED with seed", trial_seed, "expected:", expected_answer, "actual:", run_ans)
                 success = False
             #update the timing information
-            time_min = min(time_min, trial_time)
-            time_max = max(time_max, trial_time)
-            time_sum += trial_time
+            time_min = min(time_min, s.get_model().runtime)
+            time_max = max(time_max, s.get_model().runtime)
+            time_sum += s.get_model().runtime
         print("PASSED" if success else "FAILED", name)        
         return success, time_sum/trials, time_min, time_max
     
