@@ -106,16 +106,12 @@ class RailroadInkSolver:
         #CONNECTING START POINTS VARIABLES
         #each of these is defined for every single possible set of dice rolls d in D
         #the flow of joins between two adjacent squares
-        F = {(s,ss,e,d): m.addVar() for s in S 
-                for ss in self._board.adjacents(s) for e in E for d in D}
+        F = {(s,ss,o,e,d): m.addVar() for s in S 
+                for ss in self._board.adjacents(s) for o in O for e in E for d in D}
         #transfer flow between rails and highways at square s (from e)
-        FF = {(s,e,d) : m.addVar() for s in I for e in E for d in D} 
+        FF = {(s,o,e,d) : m.addVar() for s in I for o in O for e in E for d in D} 
         #flow from a start square to the super sink
-        G = {(s,d) : m.addVar() for s in O for d in D} 
-        #whether there is any flow from the start square to the super sink
-        H1 = {(s,d) : m.addVar() for s in O for d in D} 
-        H2 = {(s,d) : m.addVar() for s in O for d in D} 
-        #H = {(s,d) : m.addVar(ub=1) for s in O for d in D} 
+        G = {(s,o,d) : m.addVar() for s in O for o in O for d in D} 
         #whether the extra point for connecting all of them is earned
         J = {d : m.addVar(vtype=GRB.BINARY) for d in D}
         #J = {d : m.addVar(ub=1) for d in D}
@@ -254,38 +250,39 @@ class RailroadInkSolver:
         #these are all done for only the complete dice rolls, so for d in D
         
         #the flow into an internal square must be the same as the flow out
-        internal_flows = {(s,e,d) :
-            m.addConstr(quicksum(F[s,ss,e,d] for ss in self._board.adjacents(s)) + FF[s,e,d] ==
-                        quicksum(F[ss,s,e,d] for ss in self._board.adjacents(s)) + FF[s,EdgeType.clash_type(e),d])
-            for s in I for e in E for d in D}
+        internal_flows = {(s,o,e,d) :
+            m.addConstr(quicksum(F[s,ss,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,e,d] ==
+                        quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,EdgeType.clash_type(e),d])
+            for s in I for o in O for e in E for d in D}
             
         #the flow into an external square must be the same as the flow out
         #these have a guaranteed flow in of 1 as start squares
         #they also have the ability to flow out to the sink with variable G
-        external_flows = {(s,d) :
-            m.addConstr(1 + quicksum(F[ss,s,e,d] for ss in self._board.adjacents(s) for e in E) ==
-                        quicksum(F[s,ss,e,d] for ss in self._board.adjacents(s) for e in E) + G[s,d])
-            for s in O for d in D}
-           
-        #the H variables say if there is any flow from the exit to the super sink
-        sink_connections = {(s,d) :
-            m.addConstr(G[s,d] <= NUM_STARTS * H[s,d])
-            for s in O for d in D}
-            
-            
+        external_flows = {(s,o,d) :
+            m.addConstr((1 if s == o else 0) + quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s) for e in E) ==
+                        quicksum(F[s,ss,o,e,d] for ss in self._board.adjacents(s) for e in E) + G[s,o,d])
+            for s in O for o in O for d in D}
+               
         #flow variables can only be set if the connection exists on that edge
-        flow_existence = {(s,ss,e,d):
-            m.addConstr(F[s,ss,e,d] <= (NUM_STARTS * Y[s,ss,e,d]))
-            for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+        flow_existence = {(s,ss,o,e,d):
+            m.addConstr(F[s,ss,o,e,d] <= Y[s,ss,e,d])
+            for s in S for ss in self._board.adjacents(s) for o in O for e in E for d in D}
             
         #transfer flow existence, if the piece played is a junction, we can flow between highways and railways on that square
-        transfer_flow = {(s,e,d):
-            m.addConstr(FF[s,e,d] <= NUM_STARTS * quicksum(X[t,s,c] for t in T if t.get_piece() in SWITCH_PIECES for c in prefixes(d)))
-            for s in I for e in E for d in D}
+        transfer_flow = {(s,o,e,d):
+            m.addConstr(FF[s,o,e,d] <= quicksum(X[t,s,c] for t in T if t.get_piece() in SWITCH_PIECES for c in prefixes(d)))
+            for s in I for o in O for e in E for d in D}
+            
+        #no duals
+        no_bidirectional = {(s,o,d) :
+            m.addConstr(G[s,o,d] == 0)
+            for s in O for o in O if s < o for d in D}
+            
+        
             
         #add a bonus point if there is only one connection to the super sink (all exits connected)
         bonus_point = {d :
-            m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum((1 - H[s,d]) for s in O))
+            m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum(G[s,o,d] for s in O for o in O if s != o))
             for d in D}
             
         #LONGEST RAILWAY/HIGHWAY CONSTRAINTS
@@ -320,7 +317,7 @@ class RailroadInkSolver:
         #calculate the score for each full scenario, use a <= because the optimisation will force equality where important
         scoring = {d :
             m.addConstr(Alpha[d] <= quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
-                                  + 48 - 4 * quicksum(H[s,d] for s in O) #join cluster points
+                                  + 4 * quicksum(G[s,o,d] for s in O for o in O if s != o)
                                   + J[d] #bonus point
                                   + quicksum(M[s,e,d] for s in I for e in E) #longest path points
                                   - quicksum(X[t,s,c] * t.loose_ends(s) for t in T for s in I for c in prefixes(d)) #subtraction for the number of loose ends (start of penalty calculation)
@@ -350,37 +347,7 @@ class RailroadInkSolver:
         m._board = self._board
         #optimize
         m.optimize(callback)
-        
-        
-        #muck around with some printing of the different values
-        print("------------YYYYYYYYYYY------------")
-        for a in Y:
-            if Y[a].x > 0.001:
-                print(Y[a].x, a)
-                
-        print("------------MMMMMMMMMMMMMM------------")
-        for a in M:
-            if M[a].x > 0.001 and a[1] == EdgeType.R:
-                print(a, M[a].x)
-                
-                
-        print("------------------G--------------------")
-        for a in G:
-            print(a, G[a].x)
-        print("------------------H--------------------")
-        for a in H:
-            print(a, H[a].x)
-        print("----------------F------------------")
-        for a in F:
-            if F[a].x > 0.9:
-                print(a, F[a].x)
-        print("----------------FF------------------")
-        for a in FF:
-            if FF[a].x > 0.9:
-                print(a, FF[a].x)        
             
-
-
         #do any necessary printing
         self._print_scenarios(printD, printingFolder, m, X, S, T, D)
                 
@@ -394,7 +361,7 @@ class RailroadInkSolver:
                 for d in D:
                     score = round(Alpha[d].x)
                     centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)))
-                    connecting_exits = round(48 - 4 * sum(H[s,d].x for s in O))
+                    connecting_exits = round(4 * sum(G[s,o,d].x for s in O for o in O if s != o))
                     longest_railway = round(sum(M[s,EdgeType.R,d].x for s in I))
                     longest_highway = round(sum(M[s,EdgeType.H,d].x for s in I))
                     errors = round(-1* sum(X[t,s,c].x * t.loose_ends(s) for t in T for s in I for c in prefixes(d))
