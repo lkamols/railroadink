@@ -206,37 +206,29 @@ class RailroadInkSolver:
             
         #constraints for if there are connections on any horizontal edges
         #Y variables only defined at the end, so they can be set if any of the X value prefixes are set
+        #these are split up into two constraints to improve the LP relaxation
         #only define these rules for the full dice roll
-        horizontal_connections = {(s,e,d)  :
-            m.addConstr(2 * Y[s, (s[0], s[1]+1), e, d] <= 
-                              quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)) +
-                              quicksum(X[t,(s[0],s[1]+1),c] for t in T if t.get_edge_type_on_side(Side.LEFT) == e for c in prefixes(d)))
+            
+            
+        left_connections = {(s,e,d) :
+            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)))
             for s in S if (s[0],s[1]+1) in S for e in E for d in D}
             
-            
-#        left_connections = {(s,e,d) :
-#            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)))
-#            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
-#            
-#        right_connections = {(s,e,d) :
-#            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,(s[0],s[1]+1),c] for t in T if t.get_edge_type_on_side(Side.LEFT) == e for c in prefixes(d)))
-#            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
+        right_connections = {(s,e,d) :
+            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,(s[0],s[1]+1),c] for t in T if t.get_edge_type_on_side(Side.LEFT) == e for c in prefixes(d)))
+            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
             
         #constraints for if there are connections on any vertical edges
         #scenario definition as above
-        vertical_connections = {(s,e,d) :
-            m.addConstr(2 * Y[s, (s[0]+1, s[1]), e, d] <=
-                              quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)) +
-                              quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
-            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+
             
-#        top_connections = {(s,e,d) :
-#            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)))
-#            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
-#        
-#        bottom_connections = {(s,e,d) :
-#            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
-#            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+        top_connections = {(s,e,d) :
+            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)))
+            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+        
+        bottom_connections = {(s,e,d) :
+            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
+            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
         
             
         #there must be a connection to a piece played earlier or on this turn
@@ -291,8 +283,6 @@ class RailroadInkSolver:
             m.addConstr(quicksum(G[s,o,d] for s in O) == 1)
             for o in O for d in D}
             
-        
-            
         #add a bonus point if there is only one connection to the super sink (all exits connected)
         bonus_point = {d :
             m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum(G[s,o,d] for s in O for o in O if s != o))
@@ -308,6 +298,13 @@ class RailroadInkSolver:
         inflow = {(s,e,d) :
             m.addConstr(2*M[s,e,d] == K[s,e,d] + quicksum(L[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)))
             for s in I for e in E for d in D}
+            
+        #the flow on any side of a square, must be less than the flow on all the other sides + being a start square
+        #this prevents there being any ends that are not the start locations
+        #this hopefully dramatically tightens the LP
+        lp_constraints = {(s,ss,e,d) :
+            m.addConstr(L[s,ss,e,d] <= M[s,e,d] + quicksum(L[s,sss,e,d] for sss in self._board.adjacents(s, internal=True) if ss != sss))
+            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
             
         #there can only be flow on edges that have a connection of that type
         only_on_connected_edges = {(s,ss,e,d) :
@@ -364,6 +361,27 @@ class RailroadInkSolver:
         #do any necessary printing
         self._print_scenarios(printD, printingFolder, m, X, S, T, D)
                 
+        
+        
+        print("LLLLLLLLLLLLLLLLLLLLLL")
+        for r in range(NUM_ROWS):
+            for c in range(NUM_ROWS):
+                s = (r,c)
+                e = EdgeType.R
+                for d in D:
+                    for ss in self._board.adjacents(s, forward = True, internal=True):
+                        if L[s,ss,e,d].x > 0.001:
+                            print(s,ss,e,d,L[s,ss,e,d].x)
+        print("MMMMMMMMMMMMMMMMMMMM")
+        e = EdgeType.R
+        for r in range(NUM_ROWS):
+            for c in range(NUM_COLS):
+                if M[(r,c),e,(0,)].x > 0.001:
+                    print((r,c),e,M[(r,c),e,(0,)].x)
+        print("KKKKKKKKKKKKKKKKKKKKKKKK")
+        for a in K:
+            if K[a].x > 0.001:
+                print(a, K[a].x)
         
         #print the results to a CSV
         if resultsFile != None:
