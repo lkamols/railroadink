@@ -139,7 +139,7 @@ class RailroadInkSolver:
                         L[ss,s,e,d] = L[s,ss,e,d]
         #whether square s counts towards the "e" longest road
         #M = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
-        M = {(s,e,d) : m.addVar() for s in I for e in E for d in D}
+        M = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
         
         #SCORING VARIABLES
         #the score for every final scenario
@@ -318,17 +318,11 @@ class RailroadInkSolver:
             for s in I for ss in self._board.adjacents(s, internal=True, forward=True) for e in E for d in D}
 
         #this formulation allows for completely separate loops, handle removal in lazy constraints
-        #except for basic size 4 loops, add all of those at the start because they are likely to get added
-        
+        #except for basic size 4 loops, add all of those at the start because they are likely to get added   
         no_size_4_loops = {((r,c),e,d) :
-            generate_loop_constraint(m, self._board, [(r,c),(r,c+1),(r+1,c+1),(r+1,c)], L, M, e, d)
-            for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}     
-                    
-        
-#        no_size_4_loops = {((r,c),e,d) :
-#            m.addConstr(L[(r,c),(r,c+1),e,d] + L[(r,c),(r+1,c),e,d] +
-#                        L[(r,c+1),(r+1,c+1),e,d] + L[(r+1,c),(r+1,c+1),e,d] <= 3)
-#            for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}
+            m.addConstr(L[(r,c),(r,c+1),e,d] + L[(r,c),(r+1,c),e,d] +
+                        L[(r,c+1),(r+1,c+1),e,d] + L[(r+1,c),(r+1,c+1),e,d] <= 3)
+            for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}
             
         #don't set a start location and not have it scoring, this may be redundant with the two_ends equality
         end_bounds = {(s,e,d) :
@@ -372,16 +366,6 @@ class RailroadInkSolver:
         m._board = self._board
         #optimize
         m.optimize(callback)
-        
-        print(M[(0,2),EdgeType.R, (0,)].x)
-        print(M[(1,2),EdgeType.R, (0,)].x)
-        print(M[(0,3),EdgeType.R, (0,)].x)
-        print(M[(1,3),EdgeType.R, (0,)].x)
-        
-        print(L[(0,2),(1,2),EdgeType.R, (0,)].x)
-        print(L[(0,3),(1,3),EdgeType.R, (0,)].x)
-        print(L[(1,2),(1,3),EdgeType.R, (0,)].x)
-        print(L[(0,2),(0,3),EdgeType.R, (0,)].x)
             
         #do any necessary printing
         self._print_scenarios(printD, printingFolder, m, X, S, T, D)
@@ -459,36 +443,7 @@ class RailroadInkSolver:
         #remove all the squares from the board in case we need to print another situation
         for s in added_squares:
             self._board.remove_tile(s)
- 
-"""
-generates a constraint to rule out the loop defined by loop_elems, where:
-loop_elems is a list of squares that form a loop
-lazy - if True, adds as a lazy constraint
-"""           
-def generate_loop_constraint(model, board, loop_elems, L, M, e, d, lazy=False):
-    in_the_loop = []
-    inputs_to_the_loop = []
-    
-    N = len(loop_elems) #get the number of elements in the list
-    for i in range(N):
-        this = loop_elems[i]
-        prev = loop_elems[(i - i) % N]
-        nxt = loop_elems[(i + 1) % N]
-        in_the_loop.append(L[this, nxt, e, d]) #this edge is part of the loop
-        inputs_to_the_loop.append(M[this,e,d]) #feeding into this square is a possible input
-        #consider all inputs adjacent to this
-        for ss in board.adjacents(this, internal=True):
-            if ss != prev and ss != nxt:
-                inputs_to_the_loop.append(L[this,ss,e,d])
-                
-    print(in_the_loop)
-    print(inputs_to_the_loop)
-    #we have gathered all the edges in the loop and all the inputs
-    #if we add anything at all as an input, it throws the balance off and prevents the loop being formed
-    if lazy:
-        return model.cbLazy(quicksum(in_the_loop) <= quicksum(inputs_to_the_loop) * 100)
-    else:
-        return model.addConstr(quicksum(i for i in in_the_loop) <= quicksum(i for i in inputs_to_the_loop) * 100)
+
         
         
         

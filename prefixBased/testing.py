@@ -1,5 +1,3 @@
-
-import time
 import random
 from board import Board, Tile, Piece, Rotation, DiceRoll, rulebook_game, rulebook_dice_rolls
 from railroadInkSolver import RailroadInkSolver
