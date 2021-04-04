@@ -6,8 +6,10 @@ from board import *
 import csv
 import numpy as np
 import os
+import shutil
 
-RESULTS_FOLDER = "results/"
+RESULTS_FOLDER = "results"
+CSV_NAME = "points.csv"
 
 
 """
@@ -64,14 +66,24 @@ class RailroadInkSolver:
     
     """
     create and solve an IP that gives the solutions to the railroad ink problem
-    resultsFile - if not None, will create a csv with information about the problem
-    output - whether to print Gurobi output
-    printD - a list of scenarios to print, or "all" if all scenarios should be printed
-    printingFolder - a folder to print to, if not specified, they will all be printed directly
-    logFile - the file to print the log to
+    folder - a folder to print all information to, this will include the log, the results csv and any pictures,
+            saves to "last-run" if no folder is specified
+    printOutput - whether to print Gurobi output to stdout
+    printPictures - whether to print the pictures directly, if False, prints any selected pictures to the folder
+    printD - a list of scenarios to print, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
     """
-    def solve(self, resultsFile=None, output=0, printD=[], printingFolder=None, logFile="log.txt", seed=0):
+    def solve(self, folder="last-run", printOutput=0, printPictures=False, printD=[], seed=0):
+        
+        #first check the results folder exists
+        if not os.path.exists(RESULTS_FOLDER):
+            os.makedirs(RESULTS_FOLDER)
+        
+        #if the folder we are logging to exists, delete it
+        #then create an empty directory there
+        folder = RESULTS_FOLDER + "/" + folder #update the folder name, always in the RESULTS top folder
+        shutil.rmtree(folder, ignore_errors=True)
+        os.mkdir(folder)
         
         #SETS
         
@@ -347,14 +359,13 @@ class RailroadInkSolver:
         if self._objective == "expected-score":
             m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
             
-        m.setParam('OutputFlag', output)
         m.setParam('Seed',seed)
             
             
         #set up requirements for the use of lazy constraints
         m.setParam('MIPGap', 0)
         m.setParam('LazyConstraints', 1)
-        m.setParam('LogFile', RESULTS_FOLDER + logFile)
+        m.setParam('LogFile', folder + "/log.txt")
         
         #anything that is needed in the callback needs to be added to the model
         m._X = X 
@@ -366,28 +377,33 @@ class RailroadInkSolver:
         m._E = E
         m._board = self._board
         #optimize
+            
         m.optimize(callback)
+        
+        #all logging is over, point the logfile somewhere else
+        #this removes Gurobi's reference to the needed file so that it can be deleted
+        m.setParam('LogFile', RESULTS_FOLDER + 'junk.txt') 
             
         #do any necessary printing
-        self._print_scenarios(printD, printingFolder, m, X, S, T, D)
+        self._print_scenarios(printD, printPictures, folder, m, X, S, T, D)
         
         #print the results to a CSV
-        if resultsFile != None:
-            with open(RESULTS_FOLDER + resultsFile, mode="w", newline="") as csv_file:
-                csv_writer = csv.writer(csv_file, delimiter=",")
-                csv_writer.writerow(["Turn {0}".format(self._turn + i) for i in range(len(self._dice_rolls))] + 
-                                     ["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors", "Bonus Point"])
-                for d in D:
-                    score = round(Alpha[d].x)
-                    centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)))
-                    connecting_exits = round(4 * sum(G[s,o,d].x for s in O for o in O if s != o))
-                    longest_railway = round(sum(M[s,EdgeType.R,d].x for s in I))
-                    longest_highway = round(sum(M[s,EdgeType.H,d].x for s in I))
-                    errors = round(-1* sum(X[t,s,c].x * t.loose_ends(s) for t in T for s in I for c in prefixes(d))
-                                  + sum(Y[s,ss,e,dd].x for (s,ss,e,dd) in Y if dd == d and s in I and ss in I))
-                    bonus_point = round(J[d].x)
-                    csv_writer.writerow([turn for turn in d] + [score, connecting_exits, longest_railway, 
-                                                                longest_highway, centre_points, errors, bonus_point])
+        resultsFile = folder + "/" + CSV_NAME
+        with open(resultsFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Turn {0}".format(self._turn + i) for i in range(len(self._dice_rolls))] + 
+                                 ["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors", "Bonus Point"])
+            for d in D:
+                score = round(Alpha[d].x)
+                centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)))
+                connecting_exits = round(4 * sum(G[s,o,d].x for s in O for o in O if s != o))
+                longest_railway = round(sum(M[s,EdgeType.R,d].x for s in I))
+                longest_highway = round(sum(M[s,EdgeType.H,d].x for s in I))
+                errors = round(-1* sum(X[t,s,c].x * t.loose_ends(s) for t in T for s in I for c in prefixes(d))
+                              + sum(Y[s,ss,e,dd].x for (s,ss,e,dd) in Y if dd == d and s in I and ss in I))
+                bonus_point = round(J[d].x)
+                csv_writer.writerow([turn for turn in d] + [score, connecting_exits, longest_railway, 
+                                                            longest_highway, centre_points, errors, bonus_point])
         return m.objVal
                     
        
@@ -402,30 +418,19 @@ class RailroadInkSolver:
  
     """
     prints all scenarios listed in printD, if printD == "all", then prints all scenarios in D
-    prints to printingFolder, unless this is None and prints them without saving
+    prints to folder, unless printPictures is True, when it will print all directly
     """
-    def _print_scenarios(self, printD, printingFolder, m, X, S, T, D):
+    def _print_scenarios(self, printD, printPictures, folder, m, X, S, T, D):
         if printD == "all": #if the argument was "all" then print all scenarios
             printD = D
-        
-        if printingFolder == None: #print directly without saving
+            
+        if printPictures == True: #print directly without saving
             for d in printD:
                 self._print_scenario(m, X, S, T, d) 
-        else:
-            for i in range(100): #honestly if there are 100 folders with this name, failure is deserved
-                try:
-                    #append a folder index, so that if the folder exists, we don't lose everything
-                    if i != 0:
-                        folder = "{0} ({1})".format(RESULTS_FOLDER + printingFolder, i)
-                    else:
-                        folder = RESULTS_FOLDER + printingFolder
-                    os.mkdir(folder)
-                    for d in printD:
-                        self._print_scenario(m, X, S, T, d, "{0}/solution {1}.png".format(folder, d))
-                    #we successfully did all the printing, break
-                    break
-                except OSError:
-                    pass #it couldn't make the file, try the next value
+        else: #save them all with different names in the given folder, this folder must exist
+            for d in printD:
+                self._print_scenario(m, X, S, T, d, "{0}/solution {1}.png".format(folder, d))
+                
     
     """
     print the board with the solution attached for a given scenario d
@@ -651,7 +656,7 @@ if __name__ == "__main__":
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(resultsFile="rulebook_IP.csv", output=1, printD="all")
+    s.solve(folder="rulebook", printOutput=True, printPictures=False, printD="all")
     
 #    board = Board()
 #    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
