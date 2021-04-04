@@ -7,6 +7,8 @@ import csv
 import numpy as np
 import os
 import shutil
+import sys
+import contextlib
 
 RESULTS_FOLDER = "results"
 CSV_NAME = "points.csv"
@@ -73,7 +75,7 @@ class RailroadInkSolver:
     printD - a list of scenarios to print, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
     """
-    def solve(self, folder="last-run", printOutput=0, printPictures=False, printD=[], seed=0):
+    def solve(self, folder="last-run", printOutput=False, printPictures=False, printD=[], seed=0):
         
         #first check the results folder exists
         if not os.path.exists(RESULTS_FOLDER):
@@ -324,7 +326,7 @@ class RailroadInkSolver:
         #this is kind of redundant given the above constraint, but does seem to speed it up a bunch, probably need
         #more data to determine if it's worth including
         lp_constraints_2 = {(s,ss,e,d) :
-            m.addConstr(L[s,ss,e,d] <= M[s,e,d] + quicksum(L[s,sss,e,d] for sss in self._board.adjacents(s, internal=True) if ss != sss))
+            m.addConstr(L[s,ss,e,d] <= K[s,e,d] + quicksum(L[s,sss,e,d] for sss in self._board.adjacents(s, internal=True) if ss != sss))
             for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
             
         #there can only be flow on edges that have a connection of that type
@@ -376,13 +378,21 @@ class RailroadInkSolver:
         m._T = T
         m._E = E
         m._board = self._board
+        
+        #set up where to print to
+        
+        if printOutput == True:
+            new_stdout = sys.stdout #continue printing to stdout
+        else:
+            new_stdout = EmptyPrinter() #print to my terrible printer that doesn't do anything
+        
         #optimize
-            
-        m.optimize(callback)
+        with contextlib.redirect_stdout(new_stdout):
+            m.optimize(callback)
         
         #all logging is over, point the logfile somewhere else
         #this removes Gurobi's reference to the needed file so that it can be deleted
-        m.setParam('LogFile', RESULTS_FOLDER + 'junk.txt') 
+        m.setParam('LogFile', RESULTS_FOLDER + '/junk.txt') 
             
         #do any necessary printing
         self._print_scenarios(printD, printPictures, folder, m, X, S, T, D)
@@ -650,13 +660,27 @@ def lazy_checks(model, board, scenario, XV, LV):
     #remove the tiles from the board
     for tile, square in playedTiles:
         board.remove_tile(square)
+        
+    
+    
+"""
+there may well be a better way of doing this, but Gurobi needs to have somewhere to "print" to,
+so if we don't want to print to stdout at all, we need to redirect stdout to something, not nothing, 
+and this is the most nothing something I could think of
+"""
+class EmptyPrinter:
+    def write(*args):
+        pass
+    
+    def flush(*args):
+        pass
     
         
 if __name__ == "__main__":
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(folder="rulebook", printOutput=True, printPictures=False, printD="all")
+    s.solve(folder="rulebook", printOutput=False, printPictures=False, printD="all")
     
 #    board = Board()
 #    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
