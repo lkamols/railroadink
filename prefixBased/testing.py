@@ -1,4 +1,5 @@
 import random
+import math
 from board import Board, Tile, Piece, Rotation, DiceRoll, rulebook_game, rulebook_dice_rolls
 from railroadInkSolver import RailroadInkSolver
 
@@ -14,7 +15,8 @@ class TestingSuite:
                        self.test_three_max,
                        self.test_four_loop,
                        self.test_six_loop,
-                       self.test_rulebook_last_two]
+                       self.test_rulebook_last_two,
+                       self.test_rulebook_two_two]
     
     
     """
@@ -50,7 +52,7 @@ class TestingSuite:
             trial_seed = random.randrange(1000000)
             run_ans = s.solve(seed=trial_seed)
             #now that we have run the trial, check that the correct answer was reached
-            if run_ans != expected_answer:
+            if not math.isclose(run_ans, expected_answer, abs_tol=0.00001):
                 print(name, "FAILED with seed", trial_seed, "expected:", expected_answer, "actual:", run_ans)
                 success = False
             #update the timing information
@@ -240,6 +242,44 @@ class TestingSuite:
                       [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
                                  Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)]]
         return self.run_test("Two Turn Rulebook Test", board, 6, dice_rolls, "expected-score", 52, trials, seed)
+    
+    
+    """
+    tests the final two moves of the rulebook, with one option for turn 6 and two options for turn 7
+    """
+    def test_rulebook_two_two(self, trials, seed=None):
+        board = Board()
+        board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+        board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+        board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+        board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+        board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+        board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+        board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+        board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+        board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+        board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+        board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+        board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+        board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+        board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+        board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+        board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+        board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+        board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+        board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+        board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+        board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+        board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+        
+        dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+                                 Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+                      [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
+                                 Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 0.6),
+                       DiceRoll({Piece.HIGHWAY_T : 1, Piece.RAILWAY_T : 1,
+                                 Piece.HIGHWAY_CORNER : 1, Piece.STRAIGHT_STATION : 1}, 0.4)]]    
+    
+        return self.run_test("Two Two Rulebook Test", board, 6, dice_rolls, "expected-score", 53.2, trials, seed)
         
 
 if __name__ == "__main__":

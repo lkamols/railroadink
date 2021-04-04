@@ -407,7 +407,7 @@ class Board:
                     #draw a number overlay
                     txt = Image.new("RGB", (piece_image.size[0]//4, piece_image.size[1]//4), color=TURN_COLOURS[self._turn[row,col]-1])
                     d = ImageDraw.Draw(txt)
-                    fnt = ImageFont.truetype("arial.ttf", 22)
+                    fnt = ImageFont.truetype(PHOTOS_FOLDER + "arial.ttf", 22)
                     d.text((5,0), str(self._turn[row,col]), font=fnt, fill=(0,0,0))
                     piece_image.paste(txt, (piece_image.size[1]*3//4, 0))
                     im.paste(piece_image, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
