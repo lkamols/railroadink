@@ -92,40 +92,42 @@ class RailroadInkSolver:
         
         self._set_objective()
         
-        self._set_gurobi_parameters(seed, folder)
-        
-        #set up where to print to
-        
-        if printOutput == True:
-            new_stdout = sys.stdout #continue printing to stdout
-        else:
-            new_stdout = EmptyPrinter() #print to my terrible printer that doesn't do anything
-            
         #for some reason defining the callback in this function is the only way I seem to be able
         #to get the callback to play with Python's classes
         def Callback(model, where):
             self._callback(model, where)
-        
-        #optimize
-        with contextlib.redirect_stdout(new_stdout):
+
+        #redirect all output in this context, potentially to nowhere if we are not printing to stdout
+        with contextlib.redirect_stdout(self._print_stream_location(printOutput)):
+            self._set_gurobi_parameters(seed, folder)
+            
+            #OPTIMIZE
             self.m.optimize(Callback)
         
-        #all logging is over, point the logfile somewhere else
-        #this removes Gurobi's reference to the needed file so that it can be deleted
-        self.m.setParam('LogFile', RESULTS_FOLDER + '/junk.txt') 
+            #all logging is over, point the logfile somewhere else
+            #this removes Gurobi's reference to the needed file so that it can be deleted
+            self.m.setParam('LogFile', RESULTS_FOLDER + '/junk.txt') 
             
-        #do any necessary printing
+        #do any necessary printing of pictures
         self._print_scenarios(printD, printPictures, folder)
         
-        
+        #make the csv
         self._make_csv(folder)
         
-
-        return self.m.objVal
-     
-
-
-
+        #don't have any return values, instead we can get the results from the class
+        
+    """
+    get the result of the optimisation
+    """
+    def get_result(self):
+        return self.m.objval
+    
+    """
+    get the runtime of the operation
+    """
+    def get_runtime(self):
+        return self.m.runtime
+        
     """
     ensures that there is an empty folder located at 'folder', deleting any existing folder if there is ont
     """        
@@ -522,6 +524,17 @@ class RailroadInkSolver:
 
 
     #############################PRINTING######################################
+    
+    """
+    determine where to print stdout to depending on whether or not we want to see it
+    if printOutput is True, returns stdout, if False returns a fake printer that does nothing
+    """
+    def _print_stream_location(self, printOutput):
+        #set up where to print to
+        if printOutput == True:
+            return sys.stdout #continue printing to stdout
+        else:
+            return EmptyPrinter() #print to my terrible printer that doesn't do anything
 
     """
     prints all scenarios listed in printD, if printD == "all", then prints all scenarios in D
@@ -824,7 +837,9 @@ if __name__ == "__main__":
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(folder="rulebook", printOutput=True, printPictures=False, printD="all")
+    s.solve(folder="rulebook", printOutput=False, printPictures=False, printD="all")
+    print(s.get_result())
+    print(s.get_runtime())
     
 #    board = Board()
 #    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
