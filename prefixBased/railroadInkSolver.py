@@ -41,16 +41,13 @@ class RailroadInkSolver:
         self._turn = turn
         self._dice_rolls = dice_rolls
         self._objective = objective
-        
-    def get_model(self):
-        return self._model
     
     """
-    generates all possible scenarios using the dice rolls.
+    generates all possible scenarios using the dice rolls. Does this recursively so must be passed lists to build
     currentList - the current scenario 
-    L - list of all final scenarios
-    V - list of every step in every scenario
-    to generate all possible scenarios, call with self._generate_scenarios([], L, V) with L, V initialise as []
+    D - list of all final scenarios
+    C - list of every step in every scenario
+    to generate all possible scenarios, call with self._generate_scenarios([], D, C) with D, C initialise as []
     """
     def _generate_scenarios(self, currentList, D, C):
         if len(currentList) == len(self._dice_rolls):
@@ -62,289 +59,39 @@ class RailroadInkSolver:
                 self._generate_scenarios(currentList, D, C)
         C += [tuple(currentList)]
         if len(currentList) > 0:
-            currentList.pop()
-            
-
+            currentList.pop()    
     
     """
     create and solve an IP that gives the solutions to the railroad ink problem
     folder - a folder to print all information to, this will include the log, the results csv and any pictures,
             saves to "last-run" if no folder is specified
+    linear - if True, runs an LP, if False runs the IP
     printOutput - whether to print Gurobi output to stdout
     printPictures - whether to print the pictures directly, if False, prints any selected pictures to the folder
     printD - a list of scenarios to print, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
     """
-    def solve(self, folder="last-run", printOutput=False, printPictures=False, printD=[], seed=0):
+    def solve(self, folder="last-run", linear=False, printOutput=False, printPictures=False, printD=[], seed=0):
         
-        #first check the results folder exists
-        if not os.path.exists(RESULTS_FOLDER):
-            os.makedirs(RESULTS_FOLDER)
-        
-        #if the folder we are logging to exists, delete it
-        #then create an empty directory there
         folder = RESULTS_FOLDER + "/" + folder #update the folder name, always in the RESULTS top folder
-        shutil.rmtree(folder, ignore_errors=True)
-        os.mkdir(folder)
         
-        #SETS
+        #create an empty folder to store all the results in
+        self._create_empty_folder(folder)
         
-        I = {(i,j) for i in range(NUM_ROWS) for j in range(NUM_COLS)} #inside squares
-        O = Board.get_start_squares() #outside squares
-        S = I.union(O) #all squares
+        #create the model
+        self._m = Model("Railroad Ink")
         
-        T = Tile.get_all_variations() #all possible tiles
-        E = [EdgeType.H, EdgeType.R] #the two edge types
+        self._create_sets()
         
+        self._create_variables(linear)
         
-        C = [] #every individual step of a scenario possible
-        D = [] #all the final (Last) scenarios / dice rolls
-        self._generate_scenarios([], D, C)
+        self._legal_constraints()
         
-        self._model = Model("Railroad Ink")
-        m = self._model #get the model so we don't have to repeat self._model a bunch of times
+        self._joining_exits_constraints()  
         
-        #BASIC PLACEMENT VARIABLES
-        #x variables for whether tile t is placed at square s in the most recent turn of scenario c
-        #x variables exist for every step of every scenario, which turn is defined by the length
-        #of the tuple c, e.g if the tuple is () they are default placements, (1), they are first (since started)
-        #move placements
-        X = {(t,s,c) : m.addVar(vtype=GRB.BINARY) for t in T for s in S for c in C}
-        #X = {(t,s,c) : m.addVar(ub=1) for t in T for s in S for c in C}
-        #y variables for whether there is a link between adjacent squares with edge type e with dice rolls d
-        #these variables are only calculated at the end of the scenarios, not during
-        #for ease, create entries in the opposite direction that point to the same variables
-        #e.g Y[s,ss,e,d] = Y[ss,s,e,d] for all values
-        Y = {}
-        for s in S:
-            for e in E:
-                for d in D:
-                    for ss in self._board.adjacents(s, forward = True):
-                        Y[s,ss,e,d] = m.addVar()
-                        Y[ss,s,e,d] = Y[s,ss,e,d]
-        
-        #CONNECTING START POINTS VARIABLES
-        #each of these is defined for every single possible set of dice rolls d in D
-        #the flow problem is also defined for every start square 'o'
-        #these are all linear variables since we start with only 1 as an input
-        #the flow of joins between two adjacent squares
-        F = {(s,ss,o,e,d): m.addVar() for s in S 
-                for ss in self._board.adjacents(s) for o in O for e in E for d in D}
-        #transfer flow between rails and highways at square s (from e)
-        FF = {(s,o,e,d) : m.addVar() for s in I for o in O for e in E for d in D} 
-        #flow from a start square to the super sink
-        G = {(s,o,d) : m.addVar() for s in O for o in O for d in D} 
-        #whether the extra point for connecting all of them is earned
-        J = {d : m.addVar(vtype=GRB.BINARY) for d in D}
-        #J = {d : m.addVar(ub=1) for d in D}
-        
-        #LONGEST RAILWAY/HIGHWAY VARIABLES
-        #each of these is defined for every single possible set of dice rolls d in D
-        #whether square s is an end square of the path
-        K = {(s,e,d) : m.addVar() for s in I for e in E for d in D} 
-        #whether there is a longest path connection between squares s and ss
-        #define this similarly to the Y variables in that two references to the same variable exist
-        L = {}
-        for s in I:
-            for e in E:
-                for d in D:
-                    for ss in self._board.adjacents(s, forward = True, internal=True):
-                        L[s,ss,e,d] = m.addVar()
-                        L[ss,s,e,d] = L[s,ss,e,d]
-        #whether square s counts towards the "e" longest road
-        #M = {(s,e,d) : m.addVar(ub=1) for s in I for e in E for d in D}
-        M = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
-        
-        #SCORING VARIABLES
-        #the score for every final scenario
-        Alpha = {d : m.addVar() for d in D}
-        
-        #CONSTRAINTS
-        
-        #LEGAL CONSTRAINTS
-        
-        #only place one tile in each square - in all possible scenarios,
-        #this means that only one tile can be placed there across all prefixes
-        one_tile_per_square = {(s,d) :
-            m.addConstr(quicksum(X[t,s,c] for t in T for c in prefixes(d)) <= 1)
-            for s in S for d in D}
-            
-        #ensure all the pieces that are already on the board are kept, and no others are placed
-        #default placements have a scenario index of ()
-        default_placements = {(t,s) :
-            m.addConstr(X[t,s,()] == (1 if self._board.get_tile_at(s) == t else 0))
-            for s in S for t in T}
-            
-        #on every turn, in every scenario, we can only use the moves that are allocated
-        use_pieces = {(p,c) : 
-            m.addConstr(quicksum(X[t,s,c] for s in S if self._board.is_square_free(s)
-                                 for t in Tile.get_variations(p)) <= 
-                        (self._dice_rolls[len(c) - 1][c[-1]].get_dice().get(p, 0))) 
-                        #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
-            for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
-    
-        #play special pieces at most once each in every possible dice roll scenario
-        special_once = {(p,d):
-                m.addConstr(quicksum(X[t,s,c] for s in S
-                        for t in Tile.get_variations(p) for c in prefixes(d)) <= 1)
-                for p in SPECIAL_PIECES for d in D}
-            
-        #play at most one special piece per turn (in every scenario)
-        one_special_per_turn = {c :
-            m.addConstr(quicksum(X[t,s,c] for s in S for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=1)
-            for c in C if c != tuple()}
-            
-        #play max 3 special pieces total, for every single set of full dice rolls
-        three_specials_max = {d :
-            m.addConstr(quicksum(X[t,s,c] for s in S for c in prefixes(d)
-                     for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=3)
-            for d in D}
-            
-            
-        #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
-        #this needs to hold across every final scenario, only consider the final scenarios as the earlier ones are
-        #accomplished using the final scenarios and are redundant to add
-        horizontal_clashes = {(s,e,d) :
-            m.addConstr(quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)) +
-                        quicksum(X[t,(s[0],s[1]+1),c] for t in T 
-                            if t.get_edge_type_on_side(Side.LEFT) == EdgeType.clash_type(e) for c in prefixes(d)) <= 1)
-            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
-            
-        #constraints for clashes on edges joining squares vertically, preventing railways & highways connecting
-        #scenario logic as for above constraints
-        vertical_clashes = {(s,e,d) :
-            m.addConstr(quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)) +
-                        quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == EdgeType.clash_type(e) 
-                                    for c in prefixes(d)) <= 1) 
-            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
-            
-        #constraints for if there are connections on any horizontal edges
-        #Y variables only defined at the end, so they can be set if any of the X value prefixes are set
-        #these are split up into two constraints to improve the LP relaxation
-        #only define these rules for the full dice roll
-            
-            
-        left_connections = {(s,e,d) :
-            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)))
-            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
-            
-        right_connections = {(s,e,d) :
-            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,(s[0],s[1]+1),c] for t in T if t.get_edge_type_on_side(Side.LEFT) == e for c in prefixes(d)))
-            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
-            
-        #constraints for if there are connections on any vertical edges
-        #scenario definition as above
-
-            
-        top_connections = {(s,e,d) :
-            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)))
-            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
-        
-        bottom_connections = {(s,e,d) :
-            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
-            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
-        
-            
-        #there must be a connection to a piece played earlier or on this turn
-        earlier_move_connection = {(t,s,c) :
-            m.addConstr(X[t,s,c] <= (quicksum(X[tt,(s[0],s[1]-1),cc] for tt in T if tt.get_edge_type_on_side(Side.RIGHT) == t.get_edge_type_on_side(Side.LEFT) for cc in prefixes(c)) 
-                                            if (t.get_edge_type_on_side(Side.LEFT) != EdgeType.B and (s[0],s[1]-1) in S) else 0) +
-                                     (quicksum(X[tt,(s[0],s[1]+1),cc] for tt in T if tt.get_edge_type_on_side(Side.LEFT) == t.get_edge_type_on_side(Side.RIGHT) for cc in prefixes(c)) 
-                                            if (t.get_edge_type_on_side(Side.RIGHT) != EdgeType.B and (s[0],s[1]+1) in S) else 0) + 
-                                     (quicksum(X[tt,(s[0]-1,s[1]),cc] for tt in T if tt.get_edge_type_on_side(Side.BOTTOM) == t.get_edge_type_on_side(Side.TOP) for cc in prefixes(c)) 
-                                            if (t.get_edge_type_on_side(Side.TOP) != EdgeType.B and (s[0]-1,s[1]) in S) else 0) + 
-                                     (quicksum(X[tt,(s[0]+1,s[1]),cc] for tt in T if tt.get_edge_type_on_side(Side.TOP) == t.get_edge_type_on_side(Side.BOTTOM) for cc in prefixes(c)) 
-                                            if (t.get_edge_type_on_side(Side.BOTTOM) != EdgeType.B and (s[0]+1,s[1]) in S) else 0))
-            for t in T for s in S for c in C if c != tuple()}
-        
-            
-        #JOINING CONSTRAINTS    
-        #these are all done for only the complete dice rolls, so for d in D
-        #the internal constraints also exist for every possible origin square o in O
-        
-        #the flow into an internal square must be the same as the flow out
-        internal_flows = {(s,o,e,d) :
-            m.addConstr(quicksum(F[s,ss,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,e,d] ==
-                        quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,EdgeType.clash_type(e),d])
-            for s in I for o in O for e in E for d in D}
-            
-        #the flow into an external square must be the same as the flow out
-        #these have a guaranteed flow in of 1 when we are at the origin of this flow problem o
-        #they also have the ability to flow out to the sink with variable G
-        external_flows = {(s,o,d) :
-            m.addConstr((1 if s == o else 0) + quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s) for e in E) ==
-                        quicksum(F[s,ss,o,e,d] for ss in self._board.adjacents(s) for e in E) + G[s,o,d])
-            for s in O for o in O for d in D}
-               
-        #flow variables can only be set if the connection exists on that edge
-        flow_existence = {(s,ss,o,e,d):
-            m.addConstr(F[s,ss,o,e,d] <= Y[s,ss,e,d])
-            for s in S for ss in self._board.adjacents(s) for o in O for e in E for d in D}
-            
-        #transfer flow existence, if the piece played is a junction, we can flow between highways and railways on that square
-        transfer_flow = {(s,o,e,d):
-            m.addConstr(FF[s,o,e,d] <= quicksum(X[t,s,c] for t in T if t.get_piece() in SWITCH_PIECES for c in prefixes(d)))
-            for s in I for o in O for e in E for d in D}
-            
-        #only allow flow in one direction between every pair of exits
-        unidrectional_flow = {(s,o,d) :
-            m.addConstr(G[s,o,d] == 0)
-            for s in O for o in O if s < o for d in D}
-            
-        #this is a redundant constraint, but might help simplify things a bit
-        #basically saying don't look around to flow into 2 places, it's impossible
-        one_outflow = {(o,d):
-            m.addConstr(quicksum(G[s,o,d] for s in O) == 1)
-            for o in O for d in D}
-            
-        #add a bonus point if there is only one connection to the super sink (all exits connected)
-        bonus_point = {d :
-            m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum(G[s,o,d] for s in O for o in O if s != o))
-            for d in D}
             
         #LONGEST RAILWAY/HIGHWAY CONSTRAINTS
-        #these are only calculated for the full scenarios
         
-        #there must be two starting points and only 2 starting points
-        two_ends = {(e,d) :
-            m.addConstr(quicksum(K[s,e,d] for s in I) == 2)
-            for e in E for d in D}
-            
-        #an edge can only score points if it is a start square and has one out connection or has two directional connections
-        inflow = {(s,e,d) :
-            m.addConstr(2*M[s,e,d] == K[s,e,d] + quicksum(L[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)))
-            for s in I for e in E for d in D}
-            
-        #the score at a square must be greater than the flow in on every edge, this prevents lopsided scores in the LP
-        #this constraint actually forces the entire problem to be an LP (except for handling loops)
-        #this hopefully dramatically tightens the LP solution
-        lp_constraints = {(s,ss,e,d) :
-            m.addConstr(M[s,e,d] >= L[s,ss,e,d])
-            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
-            
-        #only let an edge be travelled on if there is another input to the tile as well,
-        #this is kind of redundant given the above constraint, but does seem to speed it up a bunch, probably need
-        #more data to determine if it's worth including
-        lp_constraints_2 = {(s,ss,e,d) :
-            m.addConstr(L[s,ss,e,d] <= K[s,e,d] + quicksum(L[s,sss,e,d] for sss in self._board.adjacents(s, internal=True) if ss != sss))
-            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
-            
-        #there can only be flow on edges that have a connection of that type
-        only_on_connected_edges = {(s,ss,e,d) :
-            m.addConstr(L[s,ss,e,d] <= Y[s,ss,e,d])
-            for s in I for ss in self._board.adjacents(s, internal=True, forward=True) for e in E for d in D}
-
-        #this formulation allows for completely separate loops, handle removal in lazy constraints
-        #except for basic size 4 loops, add all of those at the start because they are likely to get added   
-        no_size_4_loops = {((r,c),e,d) :
-            m.addConstr(L[(r,c),(r,c+1),e,d] + L[(r,c),(r+1,c),e,d] +
-                        L[(r,c+1),(r+1,c+1),e,d] + L[(r+1,c),(r+1,c+1),e,d] <= 3)
-            for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}
-            
-        #don't set a start location and not have it scoring, this may be redundant with the two_ends equality
-        end_bounds = {(s,e,d) :
-            m.addConstr(K[s,e,d] <= M[s,e,d])
-            for s in I for e in E for d in D}
             
         #SCORING CONSTRAINTS
         #calculate the score for each full scenario, use a <= because the optimisation will force equality where important
@@ -415,7 +162,335 @@ class RailroadInkSolver:
                 csv_writer.writerow([turn for turn in d] + [score, connecting_exits, longest_railway, 
                                                             longest_highway, centre_points, errors, bonus_point])
         return m.objVal
-                    
+     
+
+
+
+    """
+    ensures that there is an empty folder located at 'folder', deleting any existing folder if there is ont
+    """        
+    def _create_empty_folder(self, folder):
+        #check the results folder exists
+        if not os.path.exists(RESULTS_FOLDER):
+            os.makedirs(RESULTS_FOLDER)
+        
+        #if the folder we are logging to exists, delete it
+        #then create an empty directory there
+        shutil.rmtree(folder, ignore_errors=True)
+        os.mkdir(folder)    
+
+    """
+    create all the sets used for the Railroad Ink problem
+    """
+    def _create_sets(self):
+        self.I = {(i,j) for i in range(NUM_ROWS) for j in range(NUM_COLS)} #inside squares
+        self.O = Board.get_start_squares() #outside squares
+        self.S = self.I.union(self.O) #all squares
+        
+        self.T = Tile.get_all_variations() #all possible tiles
+        self.E = [EdgeType.H, EdgeType.R] #the two edge types
+        
+        
+        self.C = [] #every individual step of a scenario possible
+        self.D = [] #all the final (Last) scenarios / dice rolls
+        self._generate_scenarios([], self.D, self.C)   
+
+
+    """
+    create all the variables used in the Railroad Ink problem, if linear is True, then define the variables to
+    form an LP else define them as integers
+    """
+    def _create_variables(self, linear):
+        #unload the class variables into local variables for ease
+        m = self.m
+        T = self.T
+        S = self.S
+        C = self.C
+        D = self.D
+        E = self.E
+        I = self.I
+        O = self.O
+        
+        #BASIC PLACEMENT VARIABLES
+        
+        #x variables for whether tile t is placed at square s in the most recent turn of scenario c
+        #x variables exist for every step of every scenario, which turn is defined by the length
+        #of the tuple c, e.g if the tuple is () they are default placements, (1), they are first (since started)
+        #move placements
+        if linear:
+            self.X = {(t,s,c) : m.addVar(ub=1) for t in T for s in S for c in C}
+        else:
+            self.X = {(t,s,c) : m.addVar(vtype=GRB.BINARY) for t in T for s in S for c in C}
+            
+        #y variables for whether there is a link between adjacent squares with edge type e with dice rolls d
+        #these variables are only calculated at the end of the scenarios, not during
+        #for ease, create entries in the opposite direction that point to the same variables
+        #e.g Y[s,ss,e,d] = Y[ss,s,e,d] for all values
+        self.Y = {}
+        for s in S:
+            for e in E:
+                for d in D:
+                    for ss in self._board.adjacents(s, forward = True):
+                        self.Y[s,ss,e,d] = m.addVar()
+                        self.Y[ss,s,e,d] = self.Y[s,ss,e,d]
+        
+        #CONNECTING START POINTS VARIABLES
+        
+        #each of these is defined for every single possible set of dice rolls d in D
+        #the flow problem is also defined for every start square 'o'
+        #these are all linear variables since we start with only 1 as an input
+        #the flow of joins between two adjacent squares
+        self.F = {(s,ss,o,e,d): m.addVar() for s in S 
+                for ss in self._board.adjacents(s) for o in O for e in E for d in D}
+        #transfer flow between rails and highways at square s (from e)
+        self.FF = {(s,o,e,d) : m.addVar() for s in I for o in O for e in E for d in D} 
+        #flow from a start square to the super sink
+        self.G = {(s,o,d) : m.addVar() for s in O for o in O for d in D} 
+        #whether the extra point for connecting all of them is earned
+        if linear:
+            self.J = {d : m.addVar(ub=1) for d in D}
+        else:
+            self.J = {d : m.addVar(vtype=GRB.BINARY) for d in D}
+        
+        #LONGEST RAILWAY/HIGHWAY VARIABLES
+        
+        #each of these is defined for every single possible set of dice rolls d in D
+        #whether square s is an end square of the path
+        self.K = {(s,e,d) : m.addVar() for s in I for e in E for d in D} 
+        #whether there is a longest path connection between squares s and ss
+        #define this similarly to the Y variables in that two references to the same variable exist
+        self.L = {}
+        for s in I:
+            for e in E:
+                for d in D:
+                    for ss in self._board.adjacents(s, forward = True, internal=True):
+                        self.L[s,ss,e,d] = m.addVar()
+                        self.L[ss,s,e,d] = self.L[s,ss,e,d]
+        #whether square s counts towards the "e" longest road
+        if linear:
+            self.M = {(s,e,d) : m.addVar(ub=1) for s in I for e in E for d in D}
+        else:
+            self.M = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
+        
+        #SCORING VARIABLES
+        #the score for every final scenario
+        self.Alpha = {d : m.addVar() for d in D}
+
+    """
+    add all of the constraints to do with legal placements and setting of Y (connection) variables
+    """
+    def _legal_constraints(self):
+        #unload the class variables into local variables for ease
+        m = self.m
+        T = self.T
+        S = self.S
+        C = self.C
+        D = self.D
+        E = self.E
+        X = self.X
+        Y = self.Y
+
+        #only place one tile in each square - in all possible scenarios,
+        #this means that only one tile can be placed there across all prefixes
+        self.one_tile_per_square = {(s,d) :
+            m.addConstr(quicksum(X[t,s,c] for t in T for c in prefixes(d)) <= 1)
+            for s in S for d in D}
+            
+        #ensure all the pieces that are already on the board are kept, and no others are placed
+        #default placements have a scenario index of ()
+        self.default_placements = {(t,s) :
+            m.addConstr(X[t,s,()] == (1 if self._board.get_tile_at(s) == t else 0))
+            for s in S for t in T}
+            
+        #on every turn, in every scenario, we can only use the moves that are allocated
+        self.use_pieces = {(p,c) : 
+            m.addConstr(quicksum(X[t,s,c] for s in S if self._board.is_square_free(s)
+                                 for t in Tile.get_variations(p)) <= 
+                        (self._dice_rolls[len(c) - 1][c[-1]].get_dice().get(p, 0))) 
+                        #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
+            for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
+    
+        #play special pieces at most once each in every possible dice roll scenario
+        self.special_once = {(p,d):
+                m.addConstr(quicksum(X[t,s,c] for s in S
+                        for t in Tile.get_variations(p) for c in prefixes(d)) <= 1)
+                for p in SPECIAL_PIECES for d in D}
+            
+        #play at most one special piece per turn (in every scenario)
+        self.one_special_per_turn = {c :
+            m.addConstr(quicksum(X[t,s,c] for s in S for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=1)
+            for c in C if c != tuple()}
+            
+        #play max 3 special pieces total, for every single set of full dice rolls
+        self.three_specials_max = {d :
+            m.addConstr(quicksum(X[t,s,c] for s in S for c in prefixes(d)
+                     for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=3)
+            for d in D}
+            
+            
+        #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
+        #this needs to hold across every final scenario, only consider the final scenarios as the earlier ones are
+        #accomplished using the final scenarios and are redundant to add
+        self.horizontal_clashes = {(s,e,d) :
+            m.addConstr(quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)) +
+                        quicksum(X[t,(s[0],s[1]+1),c] for t in T 
+                            if t.get_edge_type_on_side(Side.LEFT) == EdgeType.clash_type(e) for c in prefixes(d)) <= 1)
+            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
+            
+        #constraints for clashes on edges joining squares vertically, preventing railways & highways connecting
+        #scenario logic as for above constraints
+        self. vertical_clashes = {(s,e,d) :
+            m.addConstr(quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)) +
+                        quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == EdgeType.clash_type(e) 
+                                    for c in prefixes(d)) <= 1) 
+            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+            
+        #constraints for if there are connections on any horizontal edges
+        #Y variables only defined at the end, so they can be set if any of the X value prefixes are set
+        #these are split up into two constraints to improve the LP relaxation
+        #only define these rules for the full dice roll
+        self.left_connections = {(s,e,d) :
+            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)))
+            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
+            
+        self.right_connections = {(s,e,d) :
+            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,(s[0],s[1]+1),c] for t in T if t.get_edge_type_on_side(Side.LEFT) == e for c in prefixes(d)))
+            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
+            
+        #constraints for if there are connections on any vertical edges
+        #scenario definition as above   
+        self.top_connections = {(s,e,d) :
+            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)))
+            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+        
+        self.bottom_connections = {(s,e,d) :
+            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
+            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+        
+            
+        #there must be a connection to a piece played earlier or on this turn
+        self.earlier_move_connection = {(t,s,c) :
+            m.addConstr(X[t,s,c] <= (quicksum(X[tt,(s[0],s[1]-1),cc] for tt in T if tt.get_edge_type_on_side(Side.RIGHT) == t.get_edge_type_on_side(Side.LEFT) for cc in prefixes(c)) 
+                                            if (t.get_edge_type_on_side(Side.LEFT) != EdgeType.B and (s[0],s[1]-1) in S) else 0) +
+                                     (quicksum(X[tt,(s[0],s[1]+1),cc] for tt in T if tt.get_edge_type_on_side(Side.LEFT) == t.get_edge_type_on_side(Side.RIGHT) for cc in prefixes(c)) 
+                                            if (t.get_edge_type_on_side(Side.RIGHT) != EdgeType.B and (s[0],s[1]+1) in S) else 0) + 
+                                     (quicksum(X[tt,(s[0]-1,s[1]),cc] for tt in T if tt.get_edge_type_on_side(Side.BOTTOM) == t.get_edge_type_on_side(Side.TOP) for cc in prefixes(c)) 
+                                            if (t.get_edge_type_on_side(Side.TOP) != EdgeType.B and (s[0]-1,s[1]) in S) else 0) + 
+                                     (quicksum(X[tt,(s[0]+1,s[1]),cc] for tt in T if tt.get_edge_type_on_side(Side.TOP) == t.get_edge_type_on_side(Side.BOTTOM) for cc in prefixes(c)) 
+                                            if (t.get_edge_type_on_side(Side.BOTTOM) != EdgeType.B and (s[0]+1,s[1]) in S) else 0))
+            for t in T for s in S for c in C if c != tuple()}
+
+
+    def _joining_exits_constraints(self):
+        #unload the class variables into local variables for ease
+        m = self.m
+        T = self.T
+        S = self.S
+        D = self.D
+        E = self.E
+        I = self.I
+        O = self.O
+        Y = self.Y
+        F = self.F
+        FF = self.FF
+        G = self.G
+        
+        #these are all done for only the complete dice rolls, so for d in D
+        #the internal constraints also exist for every possible origin square o in O
+        
+        #the flow into an internal square must be the same as the flow out
+        self.internal_flows = {(s,o,e,d) :
+            m.addConstr(quicksum(F[s,ss,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,e,d] ==
+                        quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,EdgeType.clash_type(e),d])
+            for s in I for o in O for e in E for d in D}
+            
+        #the flow into an external square must be the same as the flow out
+        #these have a guaranteed flow in of 1 when we are at the origin of this flow problem o
+        #they also have the ability to flow out to the sink with variable G
+        self.external_flows = {(s,o,d) :
+            m.addConstr((1 if s == o else 0) + quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s) for e in E) ==
+                        quicksum(F[s,ss,o,e,d] for ss in self._board.adjacents(s) for e in E) + G[s,o,d])
+            for s in O for o in O for d in D}
+               
+        #flow variables can only be set if the connection exists on that edge
+        self.flow_existence = {(s,ss,o,e,d):
+            m.addConstr(F[s,ss,o,e,d] <= Y[s,ss,e,d])
+            for s in S for ss in self._board.adjacents(s) for o in O for e in E for d in D}
+            
+        #transfer flow existence, if the piece played is a junction, we can flow between highways and railways on that square
+        self.transfer_flow = {(s,o,e,d):
+            m.addConstr(FF[s,o,e,d] <= quicksum(X[t,s,c] for t in T if t.get_piece() in SWITCH_PIECES for c in prefixes(d)))
+            for s in I for o in O for e in E for d in D}
+            
+        #only allow flow in one direction between every pair of exits
+        self.unidrectional_flow = {(s,o,d) :
+            m.addConstr(G[s,o,d] == 0)
+            for s in O for o in O if s < o for d in D}
+            
+        #this is a redundant constraint, but might help simplify things a bit
+        #basically saying don't look around to flow into 2 places, it's impossible
+        self.one_outflow = {(o,d):
+            m.addConstr(quicksum(G[s,o,d] for s in O) == 1)
+            for o in O for d in D}
+            
+        #add a bonus point if there is only one connection to the super sink (all exits connected)
+        self.bonus_point = {d :
+            m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum(G[s,o,d] for s in O for o in O if s != o))
+            for d in D}
+
+    """
+    constraints for defining the longest paths (railway/highway)
+    """
+    def _longest_path_constraints(self):
+        #REDOING THIS
+        
+        #these are only calculated for the full scenarios, for d in D
+        
+        #there must be two starting points and only 2 starting points
+        self.two_ends = {(e,d) :
+            m.addConstr(quicksum(K[s,e,d] for s in I) == 2)
+            for e in E for d in D}
+            
+        #an edge can only score points if it is a start square and has one out connection or has two directional connections
+        self.inflow = {(s,e,d) :
+            m.addConstr(2*M[s,e,d] == K[s,e,d] + quicksum(L[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)))
+            for s in I for e in E for d in D}
+            
+        #the score at a square must be greater than the flow in on every edge, this prevents lopsided scores in the LP
+        #this constraint actually forces the entire problem to be an LP (except for handling loops)
+        #this hopefully dramatically tightens the LP solution
+        self.lp_constraints = {(s,ss,e,d) :
+            m.addConstr(M[s,e,d] >= L[s,ss,e,d])
+            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
+            
+        #only let an edge be travelled on if there is another input to the tile as well,
+        #this is kind of redundant given the above constraint, but does seem to speed it up a bunch, probably need
+        #more data to determine if it's worth including
+        self.lp_constraints_2 = {(s,ss,e,d) :
+            m.addConstr(L[s,ss,e,d] <= K[s,e,d] + quicksum(L[s,sss,e,d] for sss in self._board.adjacents(s, internal=True) if ss != sss))
+            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
+            
+        #there can only be flow on edges that have a connection of that type
+        self.only_on_connected_edges = {(s,ss,e,d) :
+            m.addConstr(L[s,ss,e,d] <= Y[s,ss,e,d])
+            for s in I for ss in self._board.adjacents(s, internal=True, forward=True) for e in E for d in D}
+
+        #this formulation allows for completely separate loops, handle removal in lazy constraints
+        #except for basic size 4 loops, add all of those at the start because they are likely to get added   
+        self.no_size_4_loops = {((r,c),e,d) :
+            m.addConstr(L[(r,c),(r,c+1),e,d] + L[(r,c),(r+1,c),e,d] +
+                        L[(r,c+1),(r+1,c+1),e,d] + L[(r+1,c),(r+1,c+1),e,d] <= 3)
+            for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}
+            
+        #don't set a start location and not have it scoring, this may be redundant with the two_ends equality
+        self.end_bounds = {(s,e,d) :
+            m.addConstr(K[s,e,d] <= M[s,e,d])
+            for s in I for e in E for d in D}
+
+
+
+
+        
        
     """
     get the probability of a specific scenario, d
@@ -425,7 +500,20 @@ class RailroadInkSolver:
         for turn, roll_num in enumerate(d):
             prob *= self._dice_rolls[turn][roll_num].get_probability()
         return prob
- 
+
+
+
+
+
+
+
+
+
+
+
+
+    #############################PRINTING####################################
+
     """
     prints all scenarios listed in printD, if printD == "all", then prints all scenarios in D
     prints to folder, unless printPictures is True, when it will print all directly
@@ -680,7 +768,7 @@ if __name__ == "__main__":
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(folder="rulebook", printOutput=False, printPictures=False, printD="all")
+    s.solve(folder="rulebook", printOutput=True, printPictures=False, printD="all")
     
 #    board = Board()
 #    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
