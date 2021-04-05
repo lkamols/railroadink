@@ -9,6 +9,7 @@ import os
 import shutil
 import sys
 import contextlib
+import time
 
 RESULTS_FOLDER = "results"
 CSV_NAME = "points.csv"
@@ -73,6 +74,8 @@ class RailroadInkSolver:
     """
     def solve(self, folder="last-run", linear=False, printOutput=False, printPictures=False, printD=[], seed=0):
         
+        self._start_time = time.time()
+        
         folder = RESULTS_FOLDER + "/" + folder #update the folder name, always in the RESULTS top folder
         
         #create an empty folder to store all the results in
@@ -114,6 +117,7 @@ class RailroadInkSolver:
         #make the csv
         self._make_csv(folder)
         
+        self._end_time = time.time()
         #don't have any return values, instead we can get the results from the class
         
     """
@@ -123,23 +127,30 @@ class RailroadInkSolver:
         return self.m.objval
     
     """
-    get the runtime of the operation
+    get the optimisation runtime of the operation
     """
-    def get_runtime(self):
-        return self.m.runtime
+    def get_gurobi_runtime(self):
+        return round(self.m.runtime, 2)
+    
+    """
+    get the total runtime of the solve operation
+    """
+    def get_total_runtime(self):
+        return round(self._end_time - self._start_time, 2)
         
     """
-    ensures that there is an empty folder located at 'folder', deleting any existing folder if there is ont
+    ensures that there is an empty folder located at 'folder', deleting any existing folder if there is one
     """        
     def _create_empty_folder(self, folder):
-        #check the results folder exists
-        if not os.path.exists(RESULTS_FOLDER):
-            os.makedirs(RESULTS_FOLDER)
-        
+
         #if the folder we are logging to exists, delete it
-        #then create an empty directory there
-        shutil.rmtree(folder, ignore_errors=True)
-        os.mkdir(folder)    
+        try:
+            shutil.rmtree(folder)
+        except FileNotFoundError:
+            pass #if the folder wasn't there, we don't mind
+        
+        #then create an empty directory there, using makedirs to make any required folders along the way
+        os.makedirs(folder)    
 
     """
     create all the sets used for the Railroad Ink problem
@@ -617,12 +628,12 @@ class RailroadInkSolver:
             LV = {k : v for (k,v) in zip(self.L.keys(), model.cbGetSolution(list(self.L.values())))}
             #run the lazy checks for every first dice roll considered
             for first_dice_roll in range(len(self._dice_rolls[0])):
-                self.lazy_checks((first_dice_roll,), XV, LV)
+                self._lazy_checks((first_dice_roll,), XV, LV)
             
     """
     find the pieces that are missing given the played tiles and the expected count for pieces
     """
-    def find_missing_pieces(self, playedTiles, expectedPieceCounts):
+    def _find_missing_pieces(self, playedTiles, expectedPieceCounts):
         #next check using the played tiles that enough have been played
         answerCounts = {}
         for tile, square in playedTiles:
@@ -639,7 +650,7 @@ class RailroadInkSolver:
     returns True if the placement of tile at square s is a valid move on the board,
     i.e connects to an existing piece without any clashes
     """
-    def valid_placement(self, tile, s):
+    def _valid_placement(self, tile, s):
         #a placement is valid if there is any connection to another piece and no invalid connections
         connections = 0
         for side in Side:
@@ -650,7 +661,7 @@ class RailroadInkSolver:
                 oppS, oppSide = Board.opposite_edge(s,side)
                 #now check if the opposite side exists and if there is a connection or a clash there
                 if oppS in self.S:
-                    existingEdgeType = board.get_tile_at(oppS).get_edge_type_on_side(oppSide)
+                    existingEdgeType = self._board.get_tile_at(oppS).get_edge_type_on_side(oppSide)
                     if existingEdgeType == newEdgeType:
                         connections += 1
                     elif existingEdgeType == EdgeType.clash_type(newEdgeType):
@@ -661,17 +672,17 @@ class RailroadInkSolver:
     """
     returns True if one of the missingPieces can be played on the board, False if they cannot
     """
-    def can_place_a_missing_piece(self, missingPieces):
+    def _can_place_a_missing_piece(self, missingPieces):
         #now for every missing piece, we need to check if there is absolutely anywhere it could go
         for piece in missingPieces:
             variations = Tile.get_variations(piece) #get the possible orientations
             #check to see if there is anywhere this piece could be placed
             for s in self.I:
-                if board.is_square_free(s):
+                if self._board.is_square_free(s):
                     #check every variation of the tile
                     for tile in variations:
                         #if this placement is valid, then there is a valid placement
-                        if self.valid_placement(tile, s):
+                        if self._valid_placement(tile, s):
                             return True           
         return False #we found no placement for any missing piece
     
@@ -679,7 +690,7 @@ class RailroadInkSolver:
     determines if there are any loops in this solution and adds lazy constraints if there are any
     d is the scenario of dice rolls we received
     """
-    def add_any_loop_lazy_constraints(self, d, LV):
+    def _add_any_loop_lazy_constraints(self, d, LV):
         #unpack some variables
         m = self.m
         E = self.E
@@ -722,7 +733,7 @@ class RailroadInkSolver:
     this is a recursive function, if the checks for one step of the scenario pass, then it is called for all children of
     that scenario
     """        
-    def lazy_checks(self, scenario, XV, LV):
+    def _lazy_checks(self, scenario, XV, LV):
         #unpack some needed variables
         m = self.m
         I = self.I
@@ -755,10 +766,10 @@ class RailroadInkSolver:
             i = 0 #use an indexed while loop instead of a for loop since we are removing elements
             while i < len(tilesToAdd):
                 tile, s = tilesToAdd[i]
-                if self.valid_placement(tile, s):
+                if self._valid_placement(tile, s):
                     #if this is a valid placement on the board, add it to the board and remove it from the 
                     #list of tiles we need to add
-                    board.add_tile(tile, s)
+                    self._board.add_tile(tile, s)
                     tilesToAdd.pop(i)
                     anyAdds = True 
                 else:
@@ -789,34 +800,34 @@ class RailroadInkSolver:
                                                 for t in T if t.get_edge_type_on_side(side) == edgeType))
             #then add these to the board when checking for if pieces are missing
             for tile, s in tilesToAdd:
-                board.add_tile(tile, s)
+                self._board.add_tile(tile, s)
             #set a flag for if there were isolated placements
             isolatedSquareConstraintsAdded = True
             
         
         
         #if there were no isolated pieces, then all pieces were added to the board in the earlier process
-        missingPieces = self.find_missing_pieces(playedTiles, pieceCounts)
+        missingPieces = self._find_missing_pieces(playedTiles, pieceCounts)
         
-        canPlaceMissingPiece = self.can_place_a_missing_piece(missingPieces)
+        canPlaceMissingPiece = self._can_place_a_missing_piece(missingPieces)
         if canPlaceMissingPiece:
             m.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in playedTiles) #we can move an already played tile
                             + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) for s in I) #play a missing piece
                             + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in I) 
-                                    if not board.all_specials_used() else 0)) #play a special piece
+                                    if not self._board.all_specials_used() else 0)) #play a special piece
             
         #finally we also want to check for any loops for longest paths
-        self.add_any_loop_lazy_constraints(scenario, LV)
+        self._add_any_loop_lazy_constraints(scenario, LV)
     
          
         #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
         if not canPlaceMissingPiece and not isolatedSquareConstraintsAdded and len(scenario) < len(self._dice_rolls):
             for nextRoll in range(len(self._dice_rolls[len(scenario)])):
-                self.lazy_checks(scenario + (nextRoll,), XV, LV)
+                self._lazy_checks(scenario + (nextRoll,), XV, LV)
             
         #remove the tiles from the board
         for tile, square in playedTiles:
-            board.remove_tile(square)
+            self._board.remove_tile(square)
             
     
     
@@ -834,46 +845,43 @@ class EmptyPrinter:
     
         
 if __name__ == "__main__":
-    board = rulebook_game()
-    dice_rolls = rulebook_dice_rolls()
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(folder="rulebook", printOutput=False, printPictures=False, printD="all")
-    print(s.get_result())
-    print(s.get_runtime())
+#    board = rulebook_game()
+#    dice_rolls = rulebook_dice_rolls()
+#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+#    s.solve(folder="rulebook", printOutput=False, printPictures=False, printD="all")
+#    print(s.get_result())
+#    print(s.get_gurobi_runtime())
     
-#    board = Board()
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
-#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
-#    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
-#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
-#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
-#    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
-#    
-#    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
-#                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
-#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
-#                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 0.6),
-#                   DiceRoll({Piece.HIGHWAY_T : 1, Piece.RAILWAY_T : 1,
-#                             Piece.HIGHWAY_CORNER : 1, Piece.STRAIGHT_STATION : 1}, 0.4)]]    
-#   
-#    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
-#    #s.solve(resultsFile="results.csv", output=1, printD="all")
-#    s.solve(resultsFile="results.csv", output=1, printD="all", printingFolder="two-two")
+    board = Board()
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+    
+    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+                  DiceRoll.get_full_distribution()]    
+   
+    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
+    #s.solve(resultsFile="results.csv", output=1, printD="all")
+    s.solve(folder="big-boi", printOutput=True, printPictures=False, printD="all")
 #    
     

@@ -1,7 +1,14 @@
+from board import Board, Tile, Piece, Rotation, DiceRoll, rulebook_game, rulebook_dice_rolls
+from railroadInkSolver import RailroadInkSolver, RESULTS_FOLDER
+
 import random
 import math
-from board import Board, Tile, Piece, Rotation, DiceRoll, rulebook_game, rulebook_dice_rolls
-from railroadInkSolver import RailroadInkSolver
+import shutil
+import csv
+import os
+
+TESTING_FOLDER = "testing"
+
 
 """
 class for performing tests, not using a standard testing library because there needs to be
@@ -16,21 +23,41 @@ class TestingSuite:
                        self.test_four_loop,
                        self.test_six_loop,
                        self.test_rulebook_last_two,
-                       self.test_rulebook_two_two]
+                       self.test_rulebook_two_two
+                       ]
     
     
     """
     run all of the tests
     """
     def run_all_tests(self, trials, seed=None):
+        
+        #if the testing folder exists, delete it, ensures there are no scraps if we change anything
+        try:
+            shutil.rmtree(RESULTS_FOLDER + "/" + TESTING_FOLDER)
+        except FileNotFoundError:
+            pass #if the folder wasn't there, we don't mind
+        os.makedirs(RESULTS_FOLDER + "/" + TESTING_FOLDER)
+        
+        
         if seed != None:
             random.seed(seed)
         passes = 0
-        for test in self._tests:
-            success, ave_time, min_time, max_time = test(trials, seed)
-            print("\tave: {0:.2f} min: {1:.2f}, max: {2:.2f}".format(ave_time, min_time, max_time))
-            passes += (1 if success else 0)
-        print("{0}/{1} TESTS PASSED".format(passes, len(self._tests)))
+        test_results_path = "{0}/{1}/test-results.csv".format(RESULTS_FOLDER, TESTING_FOLDER)
+        with open(test_results_path, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Test", "Passed", "Gave", "Gmin", "Gmax", "Aave", "Amin", "Amax"])
+            for test in self._tests:
+                name, success, gurobi_times, absolute_times = test(trials, seed)
+                print("\tOptimisation Times")
+                print("\t\tave: {0:.2f} min: {1:.2f}, max: {2:.2f}".
+                      format(gurobi_times[0], gurobi_times[1], gurobi_times[2]))
+                print("\tTotal Times")
+                print("\t\tave: {0:.2f} min: {1:.2f}, max: {2:.2f}".
+                      format(absolute_times[0], absolute_times[1], absolute_times[2]))
+                passes += (1 if success else 0)
+                csv_writer.writerow([name, "PASSED" if success else "FAILED"] + gurobi_times + absolute_times)
+            print("{0}/{1} TESTS PASSED".format(passes, len(self._tests)))
         
         
     
@@ -38,29 +65,42 @@ class TestingSuite:
     run a single test, returns whether it was a success, the average, min and max execution time of trials
     """
     def run_test(self, name, board, turn, dice_rolls, objective, expected_answer, trials, seed=None):
+        
         #update the seed if we are doing a single test
         if seed != None:
             random.seed(seed)
         #create the solver object
         s = RailroadInkSolver(board, turn, dice_rolls, objective)
         success = True #whether this run was successful
-        #want the max, min and average execution time
-        time_min = float("inf")
-        time_max = 0
-        time_sum = 0
+        #want the sum, min and max execution time, both in gurobi execution and total time
+        gurobi_times = [0, float("inf"), 0]
+        absolute_times = [0, float("inf"), 0]
+
         for i in range(trials):
             trial_seed = random.randrange(1000000)
-            s.solve(seed=trial_seed)
+            s.solve(folder="{0}/{1}/{1}-{2}".format(TESTING_FOLDER, name, trial_seed), printD="all", seed=trial_seed)
             #now that we have run the trial, check that the correct answer was reached
-            if not math.isclose(s.get_result(), expected_answer, abs_tol=0.00001):
+            if not math.isclose(s.get_result(), expected_answer, abs_tol=0.0001):
                 print(name, "FAILED with seed", trial_seed, "expected:", expected_answer, "actual:", s.get_result())
                 success = False
             #update the timing information
-            time_min = min(time_min, s.get_runtime())
-            time_max = max(time_max, s.get_runtime())
-            time_sum += s.get_runtime()
-        print("PASSED" if success else "FAILED", name)        
-        return success, time_sum/trials, time_min, time_max
+            self.update_times(s.get_gurobi_runtime(), gurobi_times)
+            self.update_times(s.get_total_runtime(), absolute_times)
+        print("PASSED" if success else "FAILED", name)    
+        #update the sums to become averages
+        gurobi_times[0] = round(gurobi_times[0]/trials, 2)
+        absolute_times[0] = round(absolute_times[0]/trials, 2)
+        
+        return name, success, gurobi_times, absolute_times
+    
+    """
+    update the times recorded in 'times', where 'times' is a 3 element array with [sum, min, max]
+    and update these with the new time 'time'
+    """
+    def update_times(self, time, times):
+        times[0] += time
+        times[1] = min(times[1], time)
+        times[2] = max(times[2], time)
     
     """
     run the rulebook game as a test

@@ -1,5 +1,6 @@
-from enum import Enum
+from enum import Enum, IntEnum
 from dataclasses import dataclass
+from collections import Counter
 from PIL import Image, ImageDraw, ImageFont
 
 NUM_ROWS = 7
@@ -45,7 +46,7 @@ class EdgeType(Enum):
 """
 All the different possible pieces
 """
-class Piece(Enum):
+class Piece(IntEnum):
     #basic pieces
     RAILWAY_CORNER = 0
     RAILWAY_T = 1
@@ -482,7 +483,9 @@ class Board:
     def square_internal(r,c):
         return r >= 0 and r < NUM_ROWS and c >= 0 and c < NUM_ROWS
     
-
+"""
+class for a dice roll, a dice roll has a dictionary of pieces and a probability
+"""
 class DiceRoll:
     
     def __init__(self, dice, probability):
@@ -494,6 +497,27 @@ class DiceRoll:
     
     def get_probability(self):
         return self._probability
+    
+    """
+    gets a list of the full distribution of dice rolls
+    """
+    @staticmethod
+    def get_full_distribution():
+        roll_counts = {}
+        #consider all possible roll distributions
+        for d1 in BASIC_PIECES:
+            for d2 in BASIC_PIECES:
+                for d3 in BASIC_PIECES:
+                    for d4 in JUNCTION_PIECES:
+                        #create a tuple for the roll
+                        roll = tuple(sorted([d1,d2,d3,d4]))
+                        roll_counts[roll] = roll_counts.get(roll, 0) + 1
+        #now we have all the roll counts and their occurrences
+        num_rolls = len(BASIC_PIECES)**3 * len(JUNCTION_PIECES)
+        return [DiceRoll(Counter(roll), roll_counts[roll] / num_rolls)  for roll in roll_counts]
+    
+    def __repr__(self):
+        return "({0}, {1})".format(self._dice, self._probability)
 
 """
 create the board for the game shown in the rulebook
