@@ -414,6 +414,11 @@ class RailroadInkSolver:
         self.bonus_point = {d :
             m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum(G[s,o,d] for s in O for o in O if s != o))
             for d in D}
+            
+            
+#        self.transitivity_removal = {(s, ss, sss) :
+#            m.addConstr(G[ss,s,d] <= 1 - G[sss,ss,d])
+#            for s in O for ss in O for sss in O for d in D if s < ss and ss < sss}
 
     """
     constraints for defining the longest paths (railway/highway)
