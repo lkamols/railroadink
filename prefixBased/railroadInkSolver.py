@@ -71,8 +71,9 @@ class RailroadInkSolver:
     printPictures - whether to print the pictures directly, if False, prints any selected pictures to the folder
     printD - a list of scenarios to print, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
+    tune - if non-zero, will perform a tune with the given length of time instead of a normal search
     """
-    def solve(self, folder="last-run", linear=False, printOutput=False, printPictures=False, printD=[], seed=0):
+    def solve(self, folder="last-run", linear=False, printOutput=False, printPictures=False, printD=[], seed=0, tune=0):
         
         self._start_time = time.time()
         
@@ -104,23 +105,27 @@ class RailroadInkSolver:
 
         #redirect all output in this context, potentially to nowhere if we are not printing to stdout
         with contextlib.redirect_stdout(self._print_stream_location(printOutput)):
-            self._set_gurobi_parameters(seed, folder)
+            self._set_gurobi_parameters(seed, folder, tune)
             
-            #OPTIMIZE
-            self.m.optimize(Callback)
+            if tune == 0:
+                #OPTIMIZE
+                self.m.optimize(Callback)
+            else:
+                self.m.tune()
         
             #all logging is over, point the logfile somewhere else
             #this removes Gurobi's reference to the needed file so that it can be deleted
             self.m.setParam('LogFile', RESULTS_FOLDER + '/junk.txt') 
             
-        #do any necessary printing of pictures
-        self._print_scenarios(printD, printPictures, folder)
-        
-        #make the csv
-        self._make_csv(folder)
-        
-        self._end_time = time.time()
-        #don't have any return values, instead we can get the results from the class
+        if tune == 0:
+            #do any necessary printing of pictures
+            self._print_scenarios(printD, printPictures, folder)
+            
+            #make the csv
+            self._make_csv(folder)
+            
+            self._end_time = time.time()
+            #don't have any return values, instead we can get the results from the class
         
     """
     get the result of the optimisation
@@ -208,10 +213,6 @@ class RailroadInkSolver:
                     for ss in self._board.adjacents(s, forward = True):
                         self.Y[s,ss,e,d] = m.addVar()
                         self.Y[ss,s,e,d] = self.Y[s,ss,e,d]
-        if linear:
-            self.Z = {(s,c) : m.addVar(ub=1) for s in S for c in C}        
-        else:
-            self.Z = {(s,c) : m.addVar(vtype=GRB.BINARY) for s in S for c in C}
         
         #CONNECTING START POINTS VARIABLES
         
@@ -270,7 +271,6 @@ class RailroadInkSolver:
         E = self.E
         X = self.X
         Y = self.Y
-        Z = self.Z
 
         #only place one tile in each square - in all possible scenarios,
         #this means that only one tile can be placed there across all prefixes
@@ -559,10 +559,13 @@ class RailroadInkSolver:
     """
     set the parameters for Gurobi to use for the solve
     """
-    def _set_gurobi_parameters(self, seed, folder):
+    def _set_gurobi_parameters(self, seed, folder, tune):
         self.m.setParam('Seed',seed)
-        self.m.setParam('MIPGap', 0)
-        self.m.setParam('LazyConstraints', 1)
+        if tune == 0:
+            self.m.setParam('LazyConstraints', 1)
+            self.m.setParam('MIPGap', 0)
+        else:
+            self.m.setParam('TuneTimeLimit', tune)
         self.m.setParam('LogFile', folder + "/log.txt")
         #self.m.setParam('BranchDir', 1)
 
@@ -880,47 +883,47 @@ class EmptyPrinter:
     
         
 if __name__ == "__main__":
-#    board = rulebook_game()
-#    dice_rolls = rulebook_dice_rolls()
-#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-#    s.solve(folder="rulebook", printOutput=True, printPictures=True, linear=True, printD="all")
+    board = rulebook_game()
+    dice_rolls = rulebook_dice_rolls()
+    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+    s.solve(folder="rulebook", printOutput=True, printPictures=True, tune=30, printD="all")
     
-    board = Board()
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
-    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
-    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
-    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
-    
-    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
-                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
-                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
-                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 0.6),
-                   DiceRoll({Piece.HIGHWAY_T : 1, Piece.RAILWAY_T : 1,
-                             Piece.HIGHWAY_CORNER : 1, Piece.STRAIGHT_STATION : 1}, 0.4)]]
-                   #DiceRoll({Piece.RAILWAY_CORNER : 2, 
-                   #          Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 0.3)]
-                       
-   
-    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
-    s.solve(folder="six-three", printOutput=True, printPictures=False, linear=False, printD="all")
+#    board = Board()
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+#    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+#    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+#    
+#    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+#                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
+#                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 0.6),
+#                   DiceRoll({Piece.HIGHWAY_T : 1, Piece.RAILWAY_T : 1,
+#                             Piece.HIGHWAY_CORNER : 1, Piece.STRAIGHT_STATION : 1}, 0.4)]]
+#                   #DiceRoll({Piece.RAILWAY_CORNER : 2, 
+#                   #          Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 0.3)]
+#                       
+#   
+#    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
+#    s.solve(folder="six-three", printOutput=True, printPictures=False, linear=False, printD="all")
     
   
     
