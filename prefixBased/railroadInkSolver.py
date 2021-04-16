@@ -84,8 +84,6 @@ class RailroadInkSolver:
         #create the model
         self.m = Model("Railroad Ink")
         
-        recent_time = time.time()
-        
         self._create_sets()
         
         self._create_variables(linear)
@@ -210,6 +208,10 @@ class RailroadInkSolver:
                     for ss in self._board.adjacents(s, forward = True):
                         self.Y[s,ss,e,d] = m.addVar()
                         self.Y[ss,s,e,d] = self.Y[s,ss,e,d]
+        if linear:
+            self.Z = {(s,c) : m.addVar(ub=1) for s in S for c in C}        
+        else:
+            self.Z = {(s,c) : m.addVar(vtype=GRB.BINARY) for s in S for c in C}
         
         #CONNECTING START POINTS VARIABLES
         
@@ -245,15 +247,11 @@ class RailroadInkSolver:
                         self.L[ss,s,e,d] = self.L[s,ss,e,d]
         
         #whether square s counts towards the "e" longest road
-        if linear:
-            self.M = {(s,e,d) : m.addVar(ub=1) for s in I for e in E for d in D}
-        else:
-            self.M = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
-            
-        #relief flow problem, flow variables for ensuring that there is some flow to a start
-        self.N = {(s,ss,e,d) :
-                m.addVar()
-                for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
+#        if linear:
+#            self.M = {(s,e,d) : m.addVar(ub=1) for s in I for e in E for d in D}
+#        else:
+#            self.M = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
+        self.M = {(s,e,d) : m.addVar(ub=1) for s in I for e in E for d in D}
         
         #SCORING VARIABLES
         #the score for every final scenario
@@ -272,6 +270,7 @@ class RailroadInkSolver:
         E = self.E
         X = self.X
         Y = self.Y
+        Z = self.Z
 
         #only place one tile in each square - in all possible scenarios,
         #this means that only one tile can be placed there across all prefixes
@@ -373,19 +372,7 @@ class RailroadInkSolver:
                     if c != tuple():
                         self.earlier_move_connection[t,s,c] = m.addConstr(X[t,s,c] 
                                 <= quicksum(X[tt,ss,cc] for (ss,tt) in connections for cc in prefixes(c)))
-    
-            
-        #there must be a connection to a piece played earlier or on this turn
-#        self.earlier_move_connection = {(t,s,c) :
-#            m.addConstr(X[t,s,c] <= (quicksum(X[tt,(s[0],s[1]-1),cc] for tt in T if tt.get_edge_type_on_side(Side.RIGHT) == t.get_edge_type_on_side(Side.LEFT) for cc in prefixes(c)) 
-#                                            if (t.get_edge_type_on_side(Side.LEFT) != EdgeType.B and (s[0],s[1]-1) in S) else 0) +
-#                                     (quicksum(X[tt,(s[0],s[1]+1),cc] for tt in T if tt.get_edge_type_on_side(Side.LEFT) == t.get_edge_type_on_side(Side.RIGHT) for cc in prefixes(c)) 
-#                                            if (t.get_edge_type_on_side(Side.RIGHT) != EdgeType.B and (s[0],s[1]+1) in S) else 0) + 
-#                                     (quicksum(X[tt,(s[0]-1,s[1]),cc] for tt in T if tt.get_edge_type_on_side(Side.BOTTOM) == t.get_edge_type_on_side(Side.TOP) for cc in prefixes(c)) 
-#                                            if (t.get_edge_type_on_side(Side.TOP) != EdgeType.B and (s[0]-1,s[1]) in S) else 0) + 
-#                                     (quicksum(X[tt,(s[0]+1,s[1]),cc] for tt in T if tt.get_edge_type_on_side(Side.TOP) == t.get_edge_type_on_side(Side.BOTTOM) for cc in prefixes(c)) 
-#                                            if (t.get_edge_type_on_side(Side.BOTTOM) != EdgeType.B and (s[0]+1,s[1]) in S) else 0))
-#            for t in T for s in S for c in C if c != tuple()}
+                                
 
     """
     constraints for joining exits
@@ -467,7 +454,6 @@ class RailroadInkSolver:
         K = self.K
         L = self.L
         M = self.M
-        N = self.N
         
         #these are only calculated for the full scenarios, for d in D
         
@@ -495,9 +481,9 @@ class RailroadInkSolver:
             m.addConstr(L[s,ss,e,d] <= K[s,e,d] + quicksum(L[s,sss,e,d] for sss in self._board.adjacents(s, internal=True) if ss != sss))
             for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
             
-            
+        #size 4 loop constraints for the LP, cuts off loops 
         self.lp_constraints_3 = {((r,c),e,d) :
-            m.addConstr(0.75*(M[(r,c),e,d] + M[(r,c+1),e,d] + M[(r+1,c),e,d] + M[(r+1,c+1),e,d]) >=
+            m.addConstr((3/4)*(M[(r,c),e,d] + M[(r,c+1),e,d] + M[(r+1,c),e,d] + M[(r+1,c+1),e,d]) >=
                         L[(r,c),(r,c+1),e,d] + L[(r,c),(r+1,c),e,d] +
                         L[(r,c+1),(r+1,c+1),e,d] + L[(r+1,c),(r+1,c+1),e,d])
             for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}
@@ -517,17 +503,6 @@ class RailroadInkSolver:
         self.end_bounds = {(s,e,d) :
             m.addConstr(K[s,e,d] <= M[s,e,d])
             for s in I for e in E for d in D}
-            
-            
-        #relief variables
-        self.path_relief = {(s,e,d) :
-            m.addConstr(quicksum(N[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)) + 16 * K[s,e,d] >=
-                        quicksum(N[ss,s,e,d] for ss in self._board.adjacents(s, internal=True)) + M[s,e,d])
-            for s in I for e in E for d in D}
-            
-        self.path_relief_on_edges = {(s,ss,e,d) :
-            m.addConstr(N[s,ss,e,d] <= 16 * L[s,ss,e,d])
-            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
 
     """
     constraints for the scoring of the board
@@ -744,6 +719,50 @@ class RailroadInkSolver:
                             return True           
         return False #we found no placement for any missing piece
                                     
+    """
+    determines if there are any loops in this solution and adds lazy constraints if there are any
+    d is the scenario of dice rolls we received
+    """
+    def _add_any_loop_lazy_constraints(self, d, LV):
+        #unpack some variables
+        m = self.m
+        E = self.E
+        L = self.L
+        M = self.M
+        
+        
+        if len(d) == len(self._dice_rolls): #we are on the final roll
+            #use the existing board and check for loops, start by looking for any top left corners, as every loop has to have 
+            #a top left connection both to the right and down from one square
+            for r in range(NUM_ROWS - 1): #cannot have a loop starting in the last row (or col)
+                for c in range(NUM_COLS - 1):
+                    for e in E:
+                        if LV[(r,c),(r+1,c),e,d] > 0.9 and LV[(r,c),(r,c+1),e,d] > 0.9:
+                            #follow this path for as long as possible, starting going right
+                            current_r = r
+                            current_c = c + 1
+                            previous_dir = (0,1)
+                            squares = [(r,c)] #the list of all squares seen on this path
+                            while True:
+                                squares += [(current_r, current_c)]
+                                if current_r == r and current_c == c: #we have got back to the start, this is a loop
+                                    #add a lazy constraint to say that this path cannot be entirely on
+                                    print(squares, len(squares))
+                                    m.cbLazy(((len(squares)-2)/(len(squares)-1))*quicksum(M[squares[i],e,d] for i in range(len(squares)-1)) >= 
+                                            quicksum(L[squares[i],squares[i+1],e,d] for i in range(len(squares)-1)))
+                                    break #leave the while loop, we have found a loop
+                                #consider all of the directions we could be travelling, it can only be one of these
+                                for (dr,dc) in [(0,1),(1,0),(0,-1),(-1,0)]:
+                                    #if we aren't retracing and can continue in the given direction, move that direction
+                                    if tuple(np.add(previous_dir, (dr,dc))) != (0,0) and Board.square_internal(current_r + dr, current_c + dc) and \
+                                            LV[(current_r,current_c),(current_r+dr,current_c+dc),e,d] > 0.9:
+                                        current_r += dr
+                                        current_c += dc
+                                        previous_dir = (dr,dc) #track which direction we went last
+                                        break; #we can only move in one direction, breaking also confirms we moved for the else
+                                else: #there was no break, i.e we didn't move anywhere
+                                    break #break out of the while loop, we ran into a dead end
+    
     
     """
     Do the checks for adding lazy constraints,
@@ -833,6 +852,9 @@ class RailroadInkSolver:
                             + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in I) 
                                     if not self._board.all_specials_used() else 0)) #play a special piece
          
+        #finally we also want to check for any loops for longest paths
+        self._add_any_loop_lazy_constraints(scenario, LV)
+            
         #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
         if not canPlaceMissingPiece and not isolatedSquareConstraintsAdded and len(scenario) < len(self._dice_rolls):
             for nextRoll in range(len(self._dice_rolls[len(scenario)])):
@@ -858,48 +880,48 @@ class EmptyPrinter:
     
         
 if __name__ == "__main__":
-    board = rulebook_game()
-    dice_rolls = rulebook_dice_rolls()
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(folder="rulebook", printOutput=True, printPictures=True, linear=True, printD="all")
+#    board = rulebook_game()
+#    dice_rolls = rulebook_dice_rolls()
+#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+#    s.solve(folder="rulebook", printOutput=True, printPictures=True, linear=True, printD="all")
     
-#    board = Board()
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
-#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
-#    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
-#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
-#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
-#    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
-#    
-#    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
-#                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
-#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
-#                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 0.6),
-#                   DiceRoll({Piece.HIGHWAY_T : 1, Piece.RAILWAY_T : 1,
-#                             Piece.HIGHWAY_CORNER : 1, Piece.STRAIGHT_STATION : 1}, 0.4)]]
-#                   #DiceRoll({Piece.RAILWAY_CORNER : 2, 
-#                   #          Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 0.3)]
-#                       
-#   
-#    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
-#    s.solve(folder="six-three", printOutput=True, printPictures=False, printD="all")
-#    
+    board = Board()
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+    
+    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
+                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 0.6),
+                   DiceRoll({Piece.HIGHWAY_T : 1, Piece.RAILWAY_T : 1,
+                             Piece.HIGHWAY_CORNER : 1, Piece.STRAIGHT_STATION : 1}, 0.4)]]
+                   #DiceRoll({Piece.RAILWAY_CORNER : 2, 
+                   #          Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 0.3)]
+                       
+   
+    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
+    s.solve(folder="six-three", printOutput=True, printPictures=False, linear=False, printD="all")
+    
   
     
 #    board = Board()
@@ -957,10 +979,10 @@ if __name__ == "__main__":
 #    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (5,6), 5)
 #    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R270), (6,6), 5)
 #    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (0,2), 6)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R90), (1,2), 6)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.I), (1,3), 6)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (1,2), 6)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (1,3), 6)
 #    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,1), 6)
 #    dice_rolls = [[DiceRoll({Piece.RAILWAY_CORNER : 3, Piece.OVERPASS : 1}, 1)]]
 #    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-#    s.solve(folder="four-loop", printOutput=True, printPictures=True, printD="all")    
+#    s.solve(folder="six-loop", printOutput=True, printPictures=False, linear=False, printD="all")    
     
