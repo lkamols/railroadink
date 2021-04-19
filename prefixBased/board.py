@@ -609,6 +609,40 @@ class Board:
             self.find_clusters()
         return self._free_squares
     
+    """
+    get the score of the board as it lies
+    """
+    def score(self):
+        if not self._clusters_up_to_date:
+            self.find_clusters()
+            
+        centre_points = 0
+        #first count the centre squares
+        for row in range(2,5):
+            for col in range(2,5):
+                if self.get_piece_at((row,col)) != Piece.BLANK:
+                    centre_points += 1
+        
+        joining_exits_points = 0
+        errors = 0
+        #next score the cluster based points
+        for cluster_rep in self._cluster_reps:
+            #only consider clusters with pieces in them, not blank clusters
+            if not cluster_rep.is_blank_cluster():
+                #every non blank cluster has at least one start piece, an error was thrown
+                #if they didn't since that is illegal, score points 
+                joining_exits_points += 4*(cluster_rep.get_start_count() - 1)
+                #next any elements in the frontier that aren't on a start piece are an error
+                for frontier_edge in cluster_rep.get_frontier():
+                    if self.get_piece_at((frontier_edge.row, frontier_edge.col)) not in START_PIECES:
+                        errors += 1
+        
+        #consider the bonus point
+        if joining_exits_points == 44:
+            joining_exits_points += 1
+            
+        score = centre_points + joining_exits_points - errors
+        return score, joining_exits_points, centre_points, errors
     
 """
 A cluster of adjoining pieces in the form of a disjoint set, 
@@ -888,9 +922,7 @@ if __name__ == "__main__":
     board = rulebook_game()
     board.fancy_board_print()
     reps = board.find_clusters()
-    #print(reps)
-    for rep in reps:
-        print(rep.get_cluster_tiles())
+    print(board.score())
     
     
     
