@@ -25,7 +25,7 @@ TURN_COLOURS = ["lightcoral", "cornflowerblue", "lightseagreen", "slateblue", "o
 """
 Enum for the types of edges that can be on a piece
 """
-class EdgeType(Enum):
+class EdgeType(IntEnum):
     R = 0 #railway
     H = 1 #highway
     B = 2 #blank
@@ -101,7 +101,7 @@ class Rotation(Enum):
 """
 The sides of a piece
 """
-class Side(Enum):
+class Side(IntEnum):
     TOP = 0
     RIGHT = 1
     BOTTOM = 2
@@ -140,6 +140,15 @@ class ClusterEdge:
     col: int
     side: Side
     edgeType: EdgeType
+    
+    """
+    override the less than operator so that we can compare, this is important for ordering
+    """
+    def __lt__(self, other):
+        #say that none is greater than everything
+        if other == None:
+            return False
+        return (self.row, self.col, self.side, self.edgeType) < (other.row, other.col, other.side, other.edgeType)
 
 """
 Class for one tile, does not contain its positional information
@@ -625,6 +634,8 @@ class Board:
         
         joining_exits_points = 0
         errors = 0
+        longest_railway = 0
+        longest_highway = 0
         #next score the cluster based points
         for cluster_rep in self._cluster_reps:
             #only consider clusters with pieces in them, not blank clusters
@@ -636,13 +647,20 @@ class Board:
                 for frontier_edge in cluster_rep.get_frontier():
                     if self.get_piece_at((frontier_edge.row, frontier_edge.col)) not in START_PIECES:
                         errors += 1
+                #update the longest railway and highway by seeing if there are any longer ones in there
+                railway_paths = cluster_rep.get_longest_paths(EdgeType.R)
+                for edgePair in railway_paths:
+                    longest_railway = max(longest_railway, railway_paths[edgePair])
+                highway_paths = cluster_rep.get_longest_paths(EdgeType.H)
+                for edgePair in highway_paths:
+                    longest_highway = max(longest_highway, highway_paths[edgePair])
         
         #consider the bonus point
         if joining_exits_points == 44:
             joining_exits_points += 1
             
-        score = centre_points + joining_exits_points - errors
-        return score, joining_exits_points, centre_points, errors
+        score = centre_points + joining_exits_points + longest_railway + longest_highway - errors
+        return score, joining_exits_points, longest_railway, longest_highway, centre_points, errors
     
 """
 A cluster of adjoining pieces in the form of a disjoint set, 
@@ -675,6 +693,36 @@ class Cluster:
                 edgeType = tile.get_edge_type_on_side(side)
                 if edgeType != EdgeType.B:
                     self._frontier += [ClusterEdge(row, col, side, edgeType)]
+        
+        #initialise the longest path tracking
+        self._longest_paths = {}
+        self._longest_paths[EdgeType.R] = {}
+        self._longest_paths[EdgeType.H] = {}
+        
+        if not self._blank_cluster:
+            for e in [EdgeType.R, EdgeType.H]:
+                #first count how many railways or highways sides there are
+                count = 0
+                for side in Side:
+                    if tile.get_edge_type_on_side(side) == e:
+                        count += 1
+                #next use the counts to generate all the paths
+                if count > 1:
+                    for side in Side:
+                        for otherSide in Side:
+                            if (tile.get_edge_type_on_side(side) == e and tile.get_edge_type_on_side(otherSide) == e
+                                and side < otherSide):
+                                #path of length 1 between any ends
+                                self._longest_paths[e][((row, col, side), (row, col, otherSide))] = 1
+                if count == 1:
+                    for side in Side:
+                        if tile.get_edge_type_on_side(side) == e:
+                            if tile.get_piece() not in START_PIECES:
+                                #longest path of length 1 to a dead end
+                                self._longest_paths[e][(row, col, side), None] = 1
+                            else:
+                                #longest path of length 0 (start pieces don't count) to a dead end
+                                self._longest_paths[e][(row, col, side), None] = 0
 
     """
     find the representative element of the disjoint set containing this tile cluster
@@ -703,9 +751,10 @@ class Cluster:
         
     """
     actually merge two clusters together given their representative elements
+    if the longest paths needs to be updated, pass as an argument
     """
     @staticmethod
-    def _join_clusters(representative1, representative2):
+    def _join_clusters(representative1, representative2, longest_paths=None):
         #do this with the union by rank heuristic to ensure the clusters keep depth low
         if representative1._rank > representative2._rank:
             representative2._parent = representative1 #point cluster 2 to cluster 1
@@ -713,6 +762,8 @@ class Cluster:
             representative1._frontier += representative2._frontier
             representative1._cluster_tiles += representative2._cluster_tiles
             representative1._start_count += representative2._start_count
+            if longest_paths != None:
+                representative1._longest_paths = longest_paths
         else:
             representative1._parent = representative2
             representative2._frontier += representative1._frontier
@@ -721,6 +772,8 @@ class Cluster:
             #increase the rank if they were the same
             if representative1._rank == representative2._rank:
                 representative2._rank += 1 
+            if longest_paths != None:
+                representative2._longest_paths = longest_paths
 
         
     """
@@ -775,21 +828,103 @@ class Cluster:
         elif (edgeType1 == EdgeType.H and edgeType2 == EdgeType.H) or (edgeType1 == EdgeType.R and edgeType2 == EdgeType.R):
             representative1._remove_from_frontier(frontierEdge1)
             representative2._remove_from_frontier(frontierEdge2)
-            Cluster._join_clusters(representative1, representative2)
+            longest_paths = Cluster.join_longest_paths(representative1, representative2, tile1, tile2, edgeType1, side)
+            Cluster._join_clusters(representative1, representative2, longest_paths)
         #if they have clashes, then this is a problem and raise an error to say that this board is invalid
         elif (edgeType1 == EdgeType.H and edgeType2 == EdgeType.R) or (edgeType1 == EdgeType.R and edgeType2 == EdgeType.H):
             raise ValueError("board invalid - clash between ({0},{1}) and ({2},{3})".format(
                     tile1._row, tile1._col, tile2._row, tile2._col))
         #if we have a non-blank running into a blank (but neither are blank clusters), remove the side running into the
-        #blank from the cluster, because we won't ever be able to join to it, this is a -1 point, but we are only
-        #interested in point changes
+        #blank from the cluster, because we won't ever be able to join to it, this is a -1 point
         #don't do this for overpass segments, because there is 'another' tile there
         elif edgeType1 == EdgeType.B and not isOverpass1 and edgeType2 != EdgeType.B:
             representative2._remove_from_frontier(frontierEdge2)
+            #also cut off the longest paths that ran into this
+            Cluster.end_longest_paths(representative2, tile2, edgeType2, Side.opposite(side))
         elif edgeType2 == EdgeType.B and not isOverpass2 and edgeType1 != EdgeType.B:
             representative1._remove_from_frontier(frontierEdge1)
+            Cluster.end_longest_paths(representative1, tile1, edgeType1, side)
             
+    """
+    join the longest paths of the two clusters, this should only be called if there are two edges joining
+    """
+    @staticmethod
+    def join_longest_paths(representative1, representative2, tile1, tile2, edgeType, side):
+        #get all edges that have a path between themselves and the edge that is going to be joined
+        end_edges_1 = Cluster.get_paths_to_this_side(representative1, tile1, edgeType, side)
+        end_edges_2 = Cluster.get_paths_to_this_side(representative2, tile2, edgeType, Side.opposite(side))
+        
+        #merge the two dictionaries
+        combined_longest_paths = {}
+        for e in [EdgeType.H, EdgeType.R]:
+            combined_longest_paths[e] = {**representative1._longest_paths[e], **representative2._longest_paths[e]}
             
+        #next join together all pairs
+        for end1, len1 in end_edges_1:
+            for end2, len2 in end_edges_2:
+                #sort out the ordering
+                if end1 == None and end2 == None:
+                    pair = (None, None)
+                elif end1 == None:
+                    pair = (end2, None)
+                elif end2 == None:
+                    pair = (end1, None)
+                elif end1 < end2:
+                    pair = (end1, end2)
+                else:
+                    pair = (end2, end1)
+                #update the entry to be the max of the existing entry and the two new lengths joined together
+                #can use 
+                combined_longest_paths[edgeType][pair] = max(combined_longest_paths[edgeType].get(pair, 0), len1 + len2)
+        return combined_longest_paths
+        
+        
+    @staticmethod
+    def end_longest_paths(representative, tile, edgeType, side):
+        end_edges = Cluster.get_paths_to_this_side(representative, tile, edgeType, side)
+        for end, length in end_edges:
+            representative._longest_paths[edgeType][(end, None)] = max(representative._longest_paths[edgeType].get((end, None), 0), length)
+        
+        
+    """
+    get all longest paths that end at the given "side" of the given "tile" in the "representative" cluster
+    returns a list of ((row, col, side), len) pairs corresponding to all the other ends of paths that connect
+    to this edge. There may be one None as a (row, col, side) representing a dead end
+    """
+    @staticmethod
+    def get_paths_to_this_side(representative, tile, edgeType, side):
+        #get all edges that have a path between themselves and the edge that is going to be joined
+        #end_edges will contain (other_edge, len) pairs of paths that run into this position
+        end_edges = []
+        if edgeType != EdgeType.B:
+            this_edge = (tile._row, tile._col, side) #get the (row, col, side) tuple of this side
+            #the only possible end locations for this are the other elements in the frontier and None (dead end)
+            for clusterEdge in representative._frontier:
+                other_edge = (clusterEdge.row, clusterEdge.col, clusterEdge.side)
+                if clusterEdge.edgeType == edgeType:
+                    #order the two edges
+                    if this_edge < other_edge:
+                        edge_pair = (this_edge, other_edge)
+                    else:
+                        edge_pair = (other_edge, this_edge)
+                    #then if there is a path between these two edges, we will need to update it
+                    #we also need to remove the path so do that here and take it's length
+                    path_len = representative._longest_paths[edgeType].pop(edge_pair, -1)
+                    if path_len >= 0:
+                        end_edges.append((other_edge, path_len))
+            #consider the case of running into a dead end, i.e None
+            edge_pair = (this_edge, None)
+            path_len = representative._longest_paths[edgeType].pop(edge_pair, -1)
+            if path_len >= 0:
+                end_edges.append((None, path_len))
+        else:
+            #if the edge is blank, create a dummy edge that leads to nowhere to end all the paths from the other side
+            end_edges.add((None, 0))
+        return end_edges
+                    
+                    
+        
+        
     #GETTER METHODS
     
     """
@@ -824,6 +959,9 @@ class Cluster:
         
     def get_frontier(self):
         return self._frontier
+    
+    def get_longest_paths(self, e):
+        return self._longest_paths[e]
     
     def get_start_count(self):
         return self._start_count
