@@ -142,13 +142,25 @@ class ClusterEdge:
     edgeType: EdgeType
     
     """
-    override the less than operator so that we can compare, this is important for ordering
+    override the equals operator
     """
-    def __lt__(self, other):
-        #say that none is greater than everything
-        if other == None:
+    def __eq__(self, obj):
+        if not isinstance(obj, ClusterEdge):
             return False
-        return (self.row, self.col, self.side, self.edgeType) < (other.row, other.col, other.side, other.edgeType)
+        else:
+            return (self.row == obj.row and self.col == obj.col and self.side == obj.side and self.edgeType == obj.edgeType)
+        
+    """
+    override the hash function to treat two cluster edges with the same values as the same 
+    """
+    def __hash__(self):
+        return hash((self.row, self.col, self.side, self.edgeType))
+    
+    """
+    override the repr function to make any printing nicer
+    """
+    def __repr__(self):
+        return "CE({0}, {1}, {2}, {3})".format(self.row, self.col, self.side.name, self.edgeType.name)
 
 """
 Class for one tile, does not contain its positional information
@@ -373,7 +385,7 @@ class Board:
             for col in range(NUM_COLS):
                 self._board[row,col] = Tile(Piece.BLANK, Rotation.I)
         self._initialise_start_tiles()
-        self._special_count = 0 #count the number of special pieces used
+        self._specials_used = set()
         #cluster initialisers
         self._clusters_up_to_date = False
         self._cluster_reps = None
@@ -386,7 +398,7 @@ class Board:
         self._board[square] = tile
         self._turn[square] = turn
         if tile.get_piece() in SPECIAL_PIECES:
-            self._special_count += 1
+            self._specials_used.add(tile.get_piece())
         self._clusters_up_to_date = False
         
     """
@@ -394,7 +406,7 @@ class Board:
     """
     def remove_tile(self, square):
         if self._board[square].get_piece() in SPECIAL_PIECES:
-            self._special_count -= 1
+            self._specials_used.remove(self._board[square].get_piece())
         self._board[square] = Tile(Piece.BLANK, Rotation.I)
         if square in self._turn:
             self._turn.pop(square)
@@ -478,7 +490,7 @@ class Board:
         return self.get_piece_at(s) == Piece.BLANK
     
     def all_specials_used(self):
-        return self._special_count == 3
+        return len(self._specials_used) == 3
     
     """
     return all the (r,c) pairs of pieces adjacent to the given square
@@ -569,7 +581,9 @@ class Board:
     """
     def _check_for_illegal_clusters(self, cluster_reps):
         for cluster in cluster_reps:
-            if not cluster.is_blank_cluster() and cluster.get_start_count() == 0:
+            #an illegal cluster has no start points (or overpasses where a new cluster can be created)
+            if (not cluster.is_blank_cluster() and cluster.get_start_count() == 0 
+                and cluster.get_overpass_count() == 0):
                 raise ValueError("Cluster has no start element -", cluster.get_cluster_tiles())
         
        
@@ -619,6 +633,163 @@ class Board:
         return self._free_squares
     
     """
+    determine all the possible moves that could be made from here with a given dictionary of pieces and counts
+    """
+    def all_possible_moves(self, pieces):
+        if not self._clusters_up_to_date:
+            self.find_clusters()
+        
+        #if there is a special piece available, add one to the pieces dictionary
+        if not self.all_specials_used():
+            pieces[Piece.SPECIAL] = 1
+            
+        #generate all the tile variations for all of them
+        variations = {}
+        for piece in pieces:
+            if piece == Piece.SPECIAL:
+                variations[piece] = []
+                for special_piece in SPECIAL_PIECES:
+                    if special_piece not in self._specials_used:
+                        variations[piece] += Tile.get_variations(special_piece)
+                        
+            else:
+                variations[piece] = Tile.get_variations(piece)
+            
+        #first things first, we definitely need to know where we can make moves, this has two components
+        #it has the free squares and also all the connections
+        free_squares = set(self._free_squares)
+        edges = set()
+        for cluster_rep in self._cluster_reps:
+            if not cluster_rep.is_blank_cluster():
+                for clusterEdge in cluster_rep.get_frontier():
+                    edges.add(clusterEdge)
+
+        #now set the recursive function in motion
+        all_moves = set()
+        self.possible_moves([], pieces, variations, edges, free_squares, all_moves, set())
+        return all_moves
+        
+    """
+    determines all the possible moves with the given pieces with the current set of edges to join to
+    and free squares to place in, this is a recursive function
+    visited considers the set of move sets that have already been considered
+    """
+    def possible_moves(self, move_list, pieces, variations, edges, free_squares, all_moves, visited):
+        
+        #only consider move combinations we have not seen before
+        move_tuple = tuple(sorted(move_list))
+        if move_tuple not in visited:
+            base_case = True #determines whether we are at the base case (i.e if there are any pieces that can be played)
+            for piece in pieces:
+                #see if we have any more of this piece to play
+                piece_count = pieces[piece]
+                if piece_count > 0:
+                    
+                    #consider every possible place we could play this piece, it must be attached to some edge
+                    for edge in edges:
+                        newS, newSide = self.opposite_edge((edge.row, edge.col), edge.side)
+                        #check that this opposite edge is a free square, so we could play there
+                        if newS in free_squares:
+                            #then we could play any variation of this piece there
+                            for tile in variations[piece]:
+                                #now we need to see if we can play this tile attaching to this edge
+                                if tile.get_edge_type_on_side(newSide) == edge.edgeType:
+                                    #now we need to have a think about the other edges of the tile we would place there
+                                    #this could have a clash (meaning the piece cannot be played) or may need to have
+                                    #some more edges added to the edges set before making a recursive call
+                                    new_edges = []
+                                    clash = False
+                                    for side in Side:
+                                        if side != newSide: #don't consider the same side we just considered
+                                            #get the edge type that would be connecting here
+                                            edgeType = tile.get_edge_type_on_side(side)
+                                            #blanks do nothing, only consider non blanks
+                                            if edgeType != EdgeType.B:
+                                                #now get where this next connection would be
+                                                oppS, oppSide = self.opposite_edge(newS, side)
+                                                #now see what is there
+                                                #first consider the case where we get a clash if we play this new piece here
+                                                if ClusterEdge(oppS[0], oppS[1], oppSide, EdgeType.clash_type(edgeType)) in edges:
+                                                    clash = True
+                                                    break
+                                                #the next case is if we have a free square on this edge, meaning that we
+                                                #have a new edge to consider when placing the next piece
+                                                #if there isn't a free square there, then whatever this end is it is 
+                                                #hitting a dead end and does not need to be considered when making
+                                                #the recursive call
+                                                if oppS in free_squares:
+                                                    new_edges.append(ClusterEdge(newS[0], newS[1], side, edgeType))
+                                    
+                                    #now if there wasn't a clash at all, we can play this piece and make a recursive call
+                                    if not clash:
+                                        #we need to fix up all the values getting called, this involves a lot of creation
+                                        #as we are halfway through iterating a bunch of things and modifying them is a bad idea
+                                        
+                                        #however the move_list isn't being iterated over so we can happily modify that and undo it
+                                        move_list.append((newS, tile)) #we are playing tile at the new square
+                                        
+                                        #create a new set of edges with this edge removed and the created edges added
+                                        rec_edges = set(edges)
+                                        rec_edges.remove(edge) #we have used this edge, but we have to add the new ones
+                                        for new_edge in new_edges:
+                                            rec_edges.add(new_edge) #we have all these new edges
+                                            
+                                        #create a new pieces dictionary with the updated value
+                                        rec_pieces = dict(pieces)
+                                        rec_pieces[piece] -= 1 #decrement the number of this piece we have left
+                                        
+                                        free_squares.remove(newS) #this is no longer a free square, not being iterated
+                                        
+                                        self.possible_moves(move_list, rec_pieces, variations, rec_edges, free_squares, all_moves, visited)
+                                        
+                                        #undo some of the changes
+                                        free_squares.add(newS)
+                                        move_list.pop()
+                                    
+                                        #we have made at least one recursive call, therefore this is not the base case
+                                        base_case = False
+            
+            visited.add(move_tuple) #mark this move set as seen to not do this again
+            
+            #if this was the base case, then add this to the set of all moves
+            if base_case:
+                all_moves.add(tuple(sorted(move_list)))
+    
+    """
+    brute force approach to finding the best move that can be made,
+    tries every single move then finds the one with the highest score
+    """
+    def best_move(self, pieces):
+        #generate all the possible moves
+        all_moves = self.all_possible_moves(pieces)
+        best_score = (0,)
+        best_moves = None
+        #then score all of these scenarios
+        for moves_list in all_moves:
+            new_score = self.score_moves(moves_list)
+            if new_score > best_score:
+                best_score = new_score
+                best_moves = moves_list
+        return best_score, best_moves
+
+            
+    """
+    score the board if the moves in the given list are added to the board
+    does not change the state of the board
+    """
+    def score_moves(self, moves_list):
+        #first add all the tiles
+        for s, tile in moves_list:
+            self.add_tile(tile, s)
+        #then score the board
+        score = self.score()
+        #next remove the newly added tiles to leave the board as it was
+        for s, tile in moves_list:
+            self.remove_tile(s)
+        #then return the found score
+        return score
+    
+    """
     get the score of the board as it lies
     """
     def score(self):
@@ -633,7 +804,6 @@ class Board:
                     centre_points += 1
         
         joining_exits_points = 0
-        errors = 0
         longest_railway = 0
         longest_highway = 0
         #next score the cluster based points
@@ -642,11 +812,7 @@ class Board:
             if not cluster_rep.is_blank_cluster():
                 #every non blank cluster has at least one start piece, an error was thrown
                 #if they didn't since that is illegal, score points 
-                joining_exits_points += 4*(cluster_rep.get_start_count() - 1)
-                #next any elements in the frontier that aren't on a start piece are an error
-                for frontier_edge in cluster_rep.get_frontier():
-                    if self.get_piece_at((frontier_edge.row, frontier_edge.col)) not in START_PIECES:
-                        errors += 1
+                joining_exits_points += 4*(max(cluster_rep.get_start_count() - 1, 0))
                 #update the longest railway and highway by seeing if there are any longer ones in there
                 railway_paths = cluster_rep.get_longest_paths(EdgeType.R)
                 for edgePair in railway_paths:
@@ -654,6 +820,26 @@ class Board:
                 highway_paths = cluster_rep.get_longest_paths(EdgeType.H)
                 for edgePair in highway_paths:
                     longest_highway = max(longest_highway, highway_paths[edgePair])
+        
+        #next determine the error count by finding every join that has a blank on one side and not the other   
+        #only look right and down, since errors can only be internal         
+        errors = 0
+        for row in range(NUM_ROWS):
+            for col in range(NUM_COLS):
+                if row != NUM_ROWS - 1:
+                    topEdge = self.get_tile_at((row,col)).get_edge_type_on_side(Side.BOTTOM)
+                    bottomEdge = self.get_tile_at((row+1,col)).get_edge_type_on_side(Side.TOP)
+                    if ((topEdge == EdgeType.B and bottomEdge != EdgeType.B) or
+                        (topEdge != EdgeType.B and bottomEdge == EdgeType.B)):
+                        errors += 1
+                if col != NUM_COLS - 1:
+                    leftEdge = self.get_tile_at((row,col)).get_edge_type_on_side(Side.RIGHT)
+                    rightEdge = self.get_tile_at((row,col+1)).get_edge_type_on_side(Side.LEFT)
+                    if ((leftEdge == EdgeType.B and rightEdge != EdgeType.B) or
+                        (leftEdge != EdgeType.B and rightEdge == EdgeType.B)):
+                        errors += 1
+                    
+        
         
         #consider the bonus point
         if joining_exits_points == 44:
@@ -685,6 +871,11 @@ class Cluster:
             self._start_count = 1
         else:
             self._start_count = 0
+            
+        if tile.get_piece() == Piece.OVERPASS_HIGHWAY or tile.get_piece() == Piece.OVERPASS_RAILWAY:
+            self._overpass_count = 1
+        else:
+            self._overpass_count = 0
         
         #add all the edges of the cluster
         self._frontier = []
@@ -762,6 +953,7 @@ class Cluster:
             representative1._frontier += representative2._frontier
             representative1._cluster_tiles += representative2._cluster_tiles
             representative1._start_count += representative2._start_count
+            representative1._overpass_count += representative2._overpass_count
             if longest_paths != None:
                 representative1._longest_paths = longest_paths
         else:
@@ -769,6 +961,7 @@ class Cluster:
             representative2._frontier += representative1._frontier
             representative2._cluster_tiles += representative1._cluster_tiles
             representative2._start_count += representative1._start_count
+            representative2._overpass_count += representative1._overpass_count
             #increase the rank if they were the same
             if representative1._rank == representative2._rank:
                 representative2._rank += 1 
@@ -966,6 +1159,9 @@ class Cluster:
     def get_start_count(self):
         return self._start_count
     
+    def get_overpass_count(self):
+        return self._overpass_count
+    
     """
     get an identifier for the cluster, this will be a unique number for each cluster
     """
@@ -1061,6 +1257,8 @@ if __name__ == "__main__":
     board.fancy_board_print()
     reps = board.find_clusters()
     print(board.score())
-    
-    
+#    moves = board.all_possible_moves({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
+#                                      Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1})
+    print(board.best_move({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
+                           Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}))
     
