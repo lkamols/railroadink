@@ -97,7 +97,7 @@ class Rotation(Enum):
     R90 = 1
     R180 = 2
     R270 = 3
-   
+    
 """
 The sides of a piece
 """
@@ -131,7 +131,15 @@ RAILWAY_START_POSITIONS = [(-1, 3, Rotation.R180), (NUM_ROWS, 3, Rotation.I),
                            (1, -1, Rotation.R90), (5, -1, Rotation.R90),
                            (1, NUM_COLS, Rotation.R270), (5, NUM_COLS, Rotation.R270)]
 
-
+"""
+basically just a struct object for storing one edge of a cluster
+"""
+@dataclass 
+class ClusterEdge:
+    row: int
+    col: int
+    side: Side
+    edgeType: EdgeType
 
 """
 Class for one tile, does not contain its positional information
@@ -357,6 +365,9 @@ class Board:
                 self._board[row,col] = Tile(Piece.BLANK, Rotation.I)
         self._initialise_start_tiles()
         self._special_count = 0 #count the number of special pieces used
+        #cluster initialisers
+        self._clusters_up_to_date = False
+        self._cluster_reps = None
       
     """
     add a tile to the board at the given square
@@ -367,6 +378,7 @@ class Board:
         self._turn[square] = turn
         if tile.get_piece() in SPECIAL_PIECES:
             self._special_count += 1
+        self._clusters_up_to_date = False
         
     """
     remove the tile at the given square from the board
@@ -377,12 +389,12 @@ class Board:
         self._board[square] = Tile(Piece.BLANK, Rotation.I)
         if square in self._turn:
             self._turn.pop(square)
+        self._clusters_up_to_date = False
         
     """
     initialise all the start pieces
     """
     def _initialise_start_tiles(self):
-        self._start_tiles = []
         for row, col, rotation in RAILWAY_START_POSITIONS:
             self._board[row,col] = Tile(Piece.START_RAILWAY, rotation)
         for row, col, rotation in HIGHWAY_START_POSITIONS:
@@ -483,6 +495,318 @@ class Board:
     def square_internal(r,c):
         return r >= 0 and r < NUM_ROWS and c >= 0 and c < NUM_ROWS
     
+    
+    
+    ###################CLUSTERING LOGIC###########################
+    """
+    create a cluster for each of the squares on the board
+    """       
+    def _initialise_clusters(self):
+        clusters = {}
+        #iterate through each of the squares and create a new cluster for every square
+        for s in self._board:
+            tile = self.get_tile_at(s)
+            #if the piece is an overpass, treat it as two separate tiles for clustering
+            if tile.get_piece() == Piece.OVERPASS:
+                railway_tile = Tile(Piece.OVERPASS_RAILWAY, tile.get_rotation())
+                highway_tile = Tile(Piece.OVERPASS_HIGHWAY, tile.get_rotation())
+                clusters[s] = [Cluster(s[0], s[1], railway_tile), Cluster(s[0], s[1], highway_tile)]
+            else:
+                clusters[s] = [Cluster(s[0], s[1], tile)] #this is a list of clusters to handle overpasses
+        return clusters
+      
+    """
+    process all non-start clusters by joining them together where there are connections
+    """              
+    def _process_clusters(self, clusters):
+        #only reach up and left, this means that every bridge will be processed once
+        #go through them in this ordering just to enforce a nice ordering rather than
+        #the random nature of looping through a dictionary
+        for row in range(-1, NUM_ROWS + 1):
+            for col in range(-1, NUM_COLS + 1):
+                #check there is actually a piece at this location, if not skip over it
+                if self.get_tile_at((row,col)) == None:
+                    continue
+                
+                #try and join with the cluster above - unless there is not one
+                if self.get_tile_at((row-1,col)) != None:
+                    #need to go through this list, there is almost certainly only one element - unless it's an overpass
+                    for cluster in clusters[row,col]:
+                        for cluster_above in clusters[row - 1,col]:
+                            Cluster.try_join_clusters(cluster, cluster_above, Side.TOP)
+                #try and join with the cluster to the left - unless we are in the left column
+                if self.get_tile_at((row, col-1)) != None:
+                    for cluster in clusters[row,col]:
+                        for cluster_left in clusters[row,col - 1]:
+                            Cluster.try_join_clusters(cluster, cluster_left, Side.LEFT)
+     
+    """
+    get all the representative elements in the clusters. These are the top of each cluster
+    and contain all information about the cluster
+    """                       
+    def _get_cluster_representatives(self, clusters):
+        cluster_reps = []
+        for row in range(-1, NUM_ROWS+1):
+            for col in range(-1, NUM_COLS+1):
+                if self.get_tile_at((row,col)) != None:
+                    for cluster in clusters[row,col]:
+                        if cluster.is_representative():
+                            cluster_reps += [cluster]
+        return cluster_reps
+    
+    """
+    check for any illegal clusters that are detached from any start point, these are illegal
+    raises ValueError for any illegal board configurations
+    """
+    def _check_for_illegal_clusters(self, cluster_reps):
+        for cluster in cluster_reps:
+            if not cluster.is_blank_cluster() and cluster.get_start_count() == 0:
+                raise ValueError("Cluster has no start element -", cluster.get_cluster_tiles())
+        
+       
+    """
+    find all the clusters in the board, returns a list of clusters
+    """
+    def find_clusters(self):
+        #first create a cluster for every square on the board
+        clusters = self._initialise_clusters()
+          
+        #next process all the clusters, only reach up and left, since each pair only needs to be done once          
+        self._process_clusters(clusters)
+
+        #find all the representative elements of the clusters, these have parents that have themselves as parents
+        cluster_reps = self._get_cluster_representatives(clusters)
+        
+        #do a little check to ensure there aren't any non-blank clusters that aren't attached to an edge
+        self._check_for_illegal_clusters(cluster_reps)
+        
+        #update the knowledge of the clusters
+        self._cluster_reps = cluster_reps
+        self._clusters_up_to_date = True
+        
+        #we are going to need the free squares in various different places, so work them out once initially
+        self._determine_free_squares()
+        
+        return cluster_reps
+    
+    """
+    finds and stores the list of all free squares on the board
+    """
+    def _determine_free_squares(self):
+        self._free_squares = []
+        for cluster_rep in self._cluster_reps:
+            if cluster_rep.is_free_blank_cluster():
+                #take off the tile element, we only care about locations
+                for row, col, tile in cluster_rep.get_cluster_tiles():
+                    self._free_squares += [(row, col)]       
+    
+    """
+    get all the squares which pieces could be placed in, returns a list of (row, col) pairs
+    """
+    def get_free_squares(self):
+        #check if the clusters are up to date and if not, update them
+        if not self._clusters_up_to_date:
+            self.find_clusters()
+        return self._free_squares
+    
+    
+"""
+A cluster of adjoining pieces in the form of a disjoint set, 
+stores all the information about the cluster in the top level element in the disjoint set
+"""
+class Cluster:
+    
+    """
+    initialise a cluster with just one tile at the given location
+    """
+    def __init__(self, row, col, tile):
+        self._rank = 1 #the max height of the disjoint cluster set
+        self._parent = self
+        self._tile = tile
+        self._row = row
+        self._col = col
+        self._blank_cluster = (tile.get_piece() == Piece.BLANK) #whether this cluster is a blank cluster or a tiled cluster
+        self._cluster_tiles = [(row, col, tile)]
+        
+        #initialise the count of start pieces
+        if tile.get_piece() in START_PIECES:
+            self._start_count = 1
+        else:
+            self._start_count = 0
+        
+        #add all the edges of the cluster
+        self._frontier = []
+        if not self._blank_cluster:
+            for side in Side:
+                edgeType = tile.get_edge_type_on_side(side)
+                if edgeType != EdgeType.B:
+                    self._frontier += [ClusterEdge(row, col, side, edgeType)]
+
+    """
+    find the representative element of the disjoint set containing this tile cluster
+    applies the path compression heuristic
+    """     
+    def find_set(self):
+        if self._parent != self:
+            self._parent = self._parent.find_set()
+        return self._parent
+    
+    """
+    find an element of the frontier corresponding to the given row, column and side
+    """
+    def _find_in_frontier(self, row, col, side):       
+        for ce in self._frontier:
+            if ce.row == row and ce.col == col and ce.side == side:
+                return ce
+        raise ValueError("{0}, {1}, {2} not found in frontier".format(row, col, side.name))
+        
+    """
+    remove an element from the frontier
+    """
+    def _remove_from_frontier(self, ce):
+        self._frontier.remove(ce)
+            
+        
+    """
+    actually merge two clusters together given their representative elements
+    """
+    @staticmethod
+    def _join_clusters(representative1, representative2):
+        #do this with the union by rank heuristic to ensure the clusters keep depth low
+        if representative1._rank > representative2._rank:
+            representative2._parent = representative1 #point cluster 2 to cluster 1
+            #merge the frontier and cluster tiles list together so that rep 1 has all the joined information
+            representative1._frontier += representative2._frontier
+            representative1._cluster_tiles += representative2._cluster_tiles
+            representative1._start_count += representative2._start_count
+        else:
+            representative1._parent = representative2
+            representative2._frontier += representative1._frontier
+            representative2._cluster_tiles += representative1._cluster_tiles
+            representative2._start_count += representative1._start_count
+            #increase the rank if they were the same
+            if representative1._rank == representative2._rank:
+                representative2._rank += 1 
+
+        
+    """
+    join the clusters that tile1 and tile2 are in (not necessarily representative elements)
+    side - the side of tile1 that tile2 is supposed to be on, this function assumes that the given tiles are adjacent
+    returns False if the two entered broke the game rules
+    """
+    @staticmethod
+    def try_join_clusters(tile1, tile2, side):
+        #get the representative element of each of the tiles
+        representative1 = tile1.find_set()
+        representative2 = tile2.find_set()
+        
+        #determine whether each of these pieces is an overpass, there are some overpass edge cases
+        isOverpass1 = tile1._tile.get_piece() in OVERPASS_SEGMENTS
+        isOverpass2 = tile2._tile.get_piece() in OVERPASS_SEGMENTS
+        
+        #if they are already in the same cluster, don't join them again
+        #THIS MAY NEED TO BE MOVED, MIGHT NEED TO REMOVE THE ELEMENTS FROM THE FRONTIER STILL
+        if representative1 == representative2:
+            return
+        
+        #get the edge types out because they will be used a lot and are long
+        edgeType1 = tile1._tile.get_edge_type_on_side(side)
+        edgeType2 = tile2._tile.get_edge_type_on_side(Side.opposite(side))
+        
+        #now find the element of the frontier of each of them
+        #there is only an element on the frontier if it's not a blank edge
+        #these may not be defined, but they aren't used unless they are defined
+        #there is an edge case when processing overpasses that this edge may have been added to another cluster
+        #and removed from consideration, there is a check for that edge case as well
+        if edgeType1 != EdgeType.B and not (isOverpass2 and edgeType2 == EdgeType.B):
+            frontierEdge1 = representative1._find_in_frontier(tile1._row, tile1._col, side)
+        if edgeType2 != EdgeType.B and not (isOverpass1 and edgeType1 == EdgeType.B):
+            frontierEdge2 = representative2._find_in_frontier(tile2._row, tile2._col, Side.opposite(side))
+        
+        #consider the cases with two blank clusters, they will get joined together
+        if representative1._blank_cluster and representative2._blank_cluster:
+            #if both clusters are blank clusters, join them together
+            Cluster._join_clusters(representative1, representative2)
+        #check for if there is one blank cluster and the other isn't
+        elif representative1._blank_cluster and not representative2._blank_cluster:
+            #if there is an edge leading into the blank cluster though, add it
+            #this allows us to detect detached squares
+            if edgeType2 != EdgeType.B:
+                representative1._frontier += [frontierEdge2]
+        elif representative2._blank_cluster and not representative1._blank_cluster:
+            if edgeType1 != EdgeType.B:
+                representative2._frontier += [frontierEdge1]
+        #at this point in the chain, they are both not blank clusters
+        #if they are the same we will be joining the clusters together, remove the edges that joined them together
+        elif (edgeType1 == EdgeType.H and edgeType2 == EdgeType.H) or (edgeType1 == EdgeType.R and edgeType2 == EdgeType.R):
+            representative1._remove_from_frontier(frontierEdge1)
+            representative2._remove_from_frontier(frontierEdge2)
+            Cluster._join_clusters(representative1, representative2)
+        #if they have clashes, then this is a problem and raise an error to say that this board is invalid
+        elif (edgeType1 == EdgeType.H and edgeType2 == EdgeType.R) or (edgeType1 == EdgeType.R and edgeType2 == EdgeType.H):
+            raise ValueError("board invalid - clash between ({0},{1}) and ({2},{3})".format(
+                    tile1._row, tile1._col, tile2._row, tile2._col))
+        #if we have a non-blank running into a blank (but neither are blank clusters), remove the side running into the
+        #blank from the cluster, because we won't ever be able to join to it, this is a -1 point, but we are only
+        #interested in point changes
+        #don't do this for overpass segments, because there is 'another' tile there
+        elif edgeType1 == EdgeType.B and not isOverpass1 and edgeType2 != EdgeType.B:
+            representative2._remove_from_frontier(frontierEdge2)
+        elif edgeType2 == EdgeType.B and not isOverpass2 and edgeType1 != EdgeType.B:
+            representative1._remove_from_frontier(frontierEdge1)
+            
+            
+    #GETTER METHODS
+    
+    """
+    return whether this cluster object is the representative element of its cluster set
+    """
+    def is_representative(self):
+        return self._parent == self
+    
+    """
+    return whether a cluster can have new pieces placed in it
+    """
+    def is_free_blank_cluster(self):
+        #a cluster can have pieces placed in it if it is blank and is not isolated
+        #elements are added to the frontier for connections, if the frontier is empty
+        #it is isolated
+        return self.is_blank_cluster() and len(self._frontier) > 0
+    
+    def get_row(self):
+        return self._row
+    
+    def get_col(self):
+        return self._col
+    
+    def get_parent(self):
+        return self._parent
+    
+    def is_blank_cluster(self):
+        return self._blank_cluster
+    
+    def get_cluster_tiles(self):
+        return self._cluster_tiles
+        
+    def get_frontier(self):
+        return self._frontier
+    
+    def get_start_count(self):
+        return self._start_count
+    
+    """
+    get an identifier for the cluster, this will be a unique number for each cluster
+    """
+    def get_identifier(self):
+        return 200 * self._tile.get_piece().value + 10*self._row + self._col
+    
+    """
+    recover the position of the piece from the identifier
+    """
+    @staticmethod
+    def recover_from_identifier(idtfr):
+        return (idtfr + 10) % 200 // 10 - 1, (idtfr + 1) % 200 % 10 - 1
+    
 """
 class for a dice roll, a dice roll has a dictionary of pieces and a probability
 """
@@ -563,6 +887,10 @@ if __name__ == "__main__":
 
     board = rulebook_game()
     board.fancy_board_print()
+    reps = board.find_clusters()
+    #print(reps)
+    for rep in reps:
+        print(rep.get_cluster_tiles())
     
     
     
