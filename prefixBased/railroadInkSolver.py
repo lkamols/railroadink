@@ -65,7 +65,7 @@ class RailroadInkSolver:
     """
     create and solve an IP that gives the solutions to the railroad ink problem
     folder - a folder to print all information to, this will include the log, the results csv and any pictures,
-            saves to "last-run" if no folder is specified
+            saves to "last-run" if no folder is specified, if None will not do any saving at all
     linear - if True, runs an LP, if False runs the IP
     printOutput - whether to print Gurobi output to stdout
     printPictures - whether to print the pictures directly, if False, prints any selected pictures to the folder
@@ -83,10 +83,11 @@ class RailroadInkSolver:
         
         self._start_time = time.time()
         
-        folder = RESULTS_FOLDER + "/" + folder #update the folder name, always in the RESULTS top folder
-        
-        #create an empty folder to store all the results in
-        self._create_empty_folder(folder)
+        if folder != None:
+            folder = RESULTS_FOLDER + "/" + folder #update the folder name, always in the RESULTS top folder
+            
+            #create an empty folder to store all the results in
+            self._create_empty_folder(folder)
         
         #create the model
         self.m = Model("Railroad Ink")
@@ -127,7 +128,7 @@ class RailroadInkSolver:
             #this removes Gurobi's reference to the needed file so that it can be deleted
             self.m.setParam('LogFile', RESULTS_FOLDER + '/junk.txt') 
             
-        if tune == 0:
+        if tune == 0 and folder != None:
             #do any necessary printing of pictures
             self._print_scenarios(printD, printPictures, folder)
             
@@ -142,6 +143,24 @@ class RailroadInkSolver:
     """
     def get_result(self):
         return self.m.objval
+    
+    """
+    get a list of the actual moves that were made, returns a dictionary of the moves made
+    at every stage in every turn
+    each entry in the dictionary is a list of (square, tile) pairs
+    """
+    def get_moves_made(self):
+        all_moves = {}
+        #consider all moves, except for the original
+        for c in self.C:
+            if c != tuple():
+                moves = []
+                for s in self.I:
+                    for t in self.T:
+                        if self.X[t,s,c].x > 0.9:
+                            moves.append((s,t))
+                all_moves[c] = moves
+        return all_moves
     
     """
     get the optimisation runtime of the operation
@@ -221,7 +240,10 @@ class RailroadInkSolver:
             for e in E:
                 for d in D:
                     for ss in self._board.adjacents(s, forward = True):
-                        self.Y[s,ss,e,d] = m.addVar()
+                        if linear:
+                            self.Y[s,ss,e,d] = m.addVar(ub=1)
+                        else:
+                            self.Y[s,ss,e,d] = m.addVar(vtype=GRB.BINARY)
                         self.Y[ss,s,e,d] = self.Y[s,ss,e,d]
         
         #CONNECTING START POINTS VARIABLES
@@ -234,13 +256,15 @@ class RailroadInkSolver:
                     for ss in self._board.adjacents(s) for o in O for e in E for d in D}
             #transfer flow between rails and highways at square s (from e)
             self.FF = {(s,o,e,d) : m.addVar() for s in I for o in O for e in E for d in D} 
-            #flow from a start square to the super sink
-            self.G = {(s,o,d) : m.addVar() for s in O for o in O for d in D} 
-            #whether the extra point for connecting all of them is earned
+            
             if linear:
+                #whether the extra point for connecting all of them is earned
                 self.J = {d : m.addVar(ub=1) for d in D}
+                #flow from a start square to the super sink
+                self.G = {(s,o,d) : m.addVar() for s in O for o in O for d in D}   
             else:
                 self.J = {d : m.addVar(vtype=GRB.BINARY) for d in D}
+                self.G = {(s,o,d) : m.addVar(vtype=GRB.BINARY) for s in O for o in O for d in D} 
         
         #LONGEST RAILWAY/HIGHWAY VARIABLES
         if longest_paths:
@@ -266,7 +290,8 @@ class RailroadInkSolver:
                 self.M = {(s,e,d) : m.addVar(ub=1) for s in I for e in E for d in D}
             else:
                 self.M = {(s,e,d) : m.addVar(vtype=GRB.BINARY) for s in I for e in E for d in D}
-                        #relief flow problem, flow variables for ensuring that there is some flow to a start
+            
+            #relief flow problem, flow variables for ensuring that there is some flow to a start
             self.N = {(s,ss,e,d) :
                     m.addVar()
                     for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
@@ -603,7 +628,8 @@ class RailroadInkSolver:
             self.m.setParam('GomoryPasses', 0)
         else:
             self.m.setParam('TuneTimeLimit', tune)
-        self.m.setParam('LogFile', folder + "/log.txt")
+        if folder != None:
+            self.m.setParam('LogFile', folder + "/log.txt")
         
         
         
@@ -929,10 +955,10 @@ class EmptyPrinter:
     
         
 if __name__ == "__main__":
-#    board = rulebook_game()
-#    dice_rolls = rulebook_dice_rolls()
-#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-#    s.solve(folder="rulebook", printOutput=True, printPictures=True, printD="all")
+    board = rulebook_game()
+    dice_rolls = rulebook_dice_rolls()
+    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+    s.solve(folder=None, printOutput=True, printPictures=True, printD="all")
 
     
 #    board = Board()
@@ -974,38 +1000,38 @@ if __name__ == "__main__":
     
   
     
-    board = Board()
-    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
-    #board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
-    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
-    #board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
-    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
-    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
-    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
-    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
-    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
-    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
-    
-    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.HIGHWAY_STRAIGHT : 1,
-                             Piece.HIGHWAY_CORNER : 1, Piece.OVERPASS : 1}, 1)],
-                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 2, Piece.HIGHWAY_STRAIGHT : 1,
-                             Piece.CORNER_STATION : 1}, 1)],
-                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 2, Piece.HIGHWAY_CORNER : 1,
-                             Piece.CORNER_STATION : 1}, 1)],
-                  [DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
-                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
-                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
-                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)]]    
-
-    s = RailroadInkSolver(board, 3, dice_rolls, "expected-score")
-    s.solve(folder="one-one-one-one-one", printOutput=True, printPictures=False, printD="all")
+#    board = Board()
+#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+#    #board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+#    #board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+#    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+#    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+#    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+#    
+#    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.HIGHWAY_STRAIGHT : 1,
+#                             Piece.HIGHWAY_CORNER : 1, Piece.OVERPASS : 1}, 1)],
+#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 2, Piece.HIGHWAY_STRAIGHT : 1,
+#                             Piece.CORNER_STATION : 1}, 1)],
+#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 2, Piece.HIGHWAY_CORNER : 1,
+#                             Piece.CORNER_STATION : 1}, 1)],
+#                  [DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+#                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
+#                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)]]    
+#
+#    s = RailroadInkSolver(board, 3, dice_rolls, "expected-score")
+#    s.solve(folder="one-one-one-one-one", printOutput=True, printPictures=False, printD="all")
 
     
 #    board = Board()
