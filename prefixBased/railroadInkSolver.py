@@ -12,7 +12,10 @@ import contextlib
 import time
 
 RESULTS_FOLDER = "results"
-CSV_NAME = "points.csv"
+RESULTS_CSV = "points.csv"
+MOVES_CSV = "moves.csv"
+
+DELAY_SPECIAL_SCORE = 7
 
 
 """
@@ -35,7 +38,7 @@ class RailroadInkSolver:
     dice_rolls - a list of all the remaining dice rolls, with each remaining turn being a list of the possible 
             dice rolls on that turn
     objective - which objective function to use, the possible objective functions are:
-            "expected-score"
+            "expected-score", "delay-specials"
     """
     def __init__(self, board, turn, dice_rolls, objective):
         self._board = board
@@ -68,7 +71,6 @@ class RailroadInkSolver:
             saves to "last-run" if no folder is specified, if None will not do any saving at all
     linear - if True, runs an LP, if False runs the IP
     printOutput - whether to print Gurobi output to stdout
-    printPictures - whether to print the pictures directly, if False, prints any selected pictures to the folder
     printD - a list of scenarios to print, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
     tune - if non-zero, will perform a tune with the given length of time instead of a normal search
@@ -77,7 +79,7 @@ class RailroadInkSolver:
     errors - whether to score/lose points for errors
     lazy_constraints - whether or not to include lazy constraints
     """
-    def solve(self, folder="last-run", linear=False, printOutput=False, printPictures=False, printD=[], seed=0, tune=0,
+    def solve(self, folder="last-run", linear=False, printOutput=False, printD=[], seed=0, tune=0,
               connecting_exits=True, longest_paths=True, errors=True, lazy_constraints=True):
         self.longest_paths = longest_paths #needed in the callback
         
@@ -130,7 +132,7 @@ class RailroadInkSolver:
             
         if tune == 0 and folder != None:
             #do any necessary printing of pictures
-            self._print_scenarios(printD, printPictures, folder)
+            self._print_scenarios(printD, folder)
             
             #make the csv
             self._make_csv(folder, connecting_exits, longest_paths, errors)
@@ -596,11 +598,21 @@ class RailroadInkSolver:
     def _set_objective(self):
         #unpack into local variables to make naming cleaner
         m = self.m
+        S = self.S
         D = self.D
+        X = self.X
         Alpha = self.Alpha
         
         if self._objective == "expected-score":
             m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
+        if self._objective == "delay-specials":
+            #if there are more moves to play the specials on, give an additional score for delaying their use
+            if 8 - self._turn > 3 - self._board.count_specials_used():
+                m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D) +
+                               DELAY_SPECIAL_SCORE * (1 - quicksum(X[t,s,(0,)] for s in S for 
+                                        p in SPECIAL_PIECES for t in Tile.get_variations(p))), GRB.MAXIMIZE)
+            else:
+                m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
         
        
     """
@@ -649,25 +661,21 @@ class RailroadInkSolver:
             return EmptyPrinter() #print to my terrible printer that doesn't do anything
 
     """
-    prints all scenarios listed in printD, if printD == "all", then prints all scenarios in D
-    prints to folder, unless printPictures is True, when it will print all directly
+    prints all scenarios listed in printD, if printD == "all", then prints all scenarios in D to folder
     """
-    def _print_scenarios(self, printD, printPictures, folder):
+    def _print_scenarios(self, printD, folder):
         if printD == "all": #if the argument was "all" then print all scenarios
             printD = self.D
-            
-        if printPictures == True: #print directly without saving
-            for d in printD:
-                self._print_scenario(d) 
-        else: #save them all with different names in the given folder, this folder must exist
-            for d in printD:
-                self._print_scenario(d, file="{0}/solution {1}.png".format(folder, d))
-                
+
+        #save them all with different names in the given folder, this folder must exist
+        for d in printD:
+            self._print_scenario(d, folder)
+     
     
     """
     print the board with the solution attached for a given scenario d
     """
-    def _print_scenario(self, d, file=None):
+    def _print_scenario(self, d, folder):
         #find all the pieces and placements that we made and add them to the board
         added_squares = [] #track the squares that were added
         for s in self.S:
@@ -677,7 +685,7 @@ class RailroadInkSolver:
                         self._board.add_tile(t, s, self._turn - 1 + len(c))
                         added_squares += [s]
         #then do a super fancy board print showing the exact solution
-        self._board.fancy_board_print(file)
+        self._board.fancy_board_print("{0}/solution {1}.png".format(folder, d))
         #remove all the squares from the board in case we need to print another situation
         for s in added_squares:
             self._board.remove_tile(s)
@@ -689,10 +697,12 @@ class RailroadInkSolver:
         #unpack some variables
         I = self.I
         O = self.O
+        S = self.S
         T = self.T
         D = self.D
         X = self.X
         Y = self.Y
+        C = self.C
         if connecting_exits:
             G = self.G
             J = self.J
@@ -702,7 +712,7 @@ class RailroadInkSolver:
         Alpha = self.Alpha
         
         #print the results to a CSV
-        resultsFile = folder + "/" + CSV_NAME
+        resultsFile = folder + "/" + RESULTS_CSV
         with open(resultsFile, mode="w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=",")
             csv_writer.writerow(["Turn {0}".format(self._turn + i) for i in range(len(self._dice_rolls))] + 
@@ -719,6 +729,17 @@ class RailroadInkSolver:
                 bonus_point = round(J[d].x)
                 csv_writer.writerow([turn for turn in d] + [score, connecting_exits, longest_railway, 
                                                             longest_highway, centre_points, errors, bonus_point])
+    
+        #also create a csv for the moves that were made
+        movesFile = folder + "/" + MOVES_CSV
+        with open(movesFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            for c in C:
+                csv_writer.writerow(["Scenario {0}".format(c)])
+                for s in S:
+                    for t in T:
+                        if X[t,s,c].x > 0.9:
+                            csv_writer.writerow([t.get_piece(), t.get_rotation(), t.get_flip(), s[0], s[1]])
         
         
     #############################CALLBACK FUNCTIONS############################
@@ -919,10 +940,14 @@ class RailroadInkSolver:
         #if there were no isolated pieces, then all pieces were added to the board in the earlier process
         missingPieces = self._find_missing_pieces(playedTiles, pieceCounts)
         
+        print(missingPieces)
+        
         canPlaceMissingPiece = self._can_place_a_missing_piece(missingPieces)
+        print(canPlaceMissingPiece)
         if canPlaceMissingPiece:
             m.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in playedTiles) #we can move an already played tile
-                            + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) for s in I) #play a missing piece
+                            + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) 
+                                    for s in I if self._board.get_piece_at(s) == Piece.BLANK) #play a missing piece
                             + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in I) 
                                     if not self._board.all_specials_used() else 0)) #play a special piece
          
@@ -955,10 +980,16 @@ class EmptyPrinter:
     
         
 if __name__ == "__main__":
-    board = rulebook_game()
-    dice_rolls = rulebook_dice_rolls()
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(folder=None, printOutput=True, printPictures=True, printD="all")
+#    board = rulebook_game()
+#    dice_rolls = rulebook_dice_rolls()
+#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+#    s.solve(folder="rulebook", printOutput=True, printD="all")
+    
+    board = Board()
+    dice_rolls = [[DiceRoll({Piece.RAILWAY_CORNER : 1, Piece.HIGHWAY_CORNER : 2,
+                             Piece.STRAIGHT_STATION : 1}, 1)]]
+    s = RailroadInkSolver(board, 1, dice_rolls, "delay-specials")
+    s.solve(folder="error-test", printOutput=True, printD="all")
 
     
 #    board = Board()

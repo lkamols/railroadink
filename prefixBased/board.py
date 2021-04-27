@@ -341,6 +341,9 @@ class Tile:
     def get_rotation(self):
         return self._rotation
     
+    def get_flip(self):
+        return self._flip
+    
     def get_overpass(self):
         return self._piece == Piece.OVERPASS
     
@@ -491,6 +494,9 @@ class Board:
     
     def all_specials_used(self):
         return len(self._specials_used) == 3
+    
+    def count_specials_used(self):
+        return len(self._specials_used)
     
     """
     return all the (r,c) pairs of pieces adjacent to the given square
@@ -749,11 +755,17 @@ class Board:
                                         #we have made at least one recursive call, therefore this is not the base case
                                         base_case = False
             
+            
+            
+            
             visited.add(move_tuple) #mark this move set as seen to not do this again
             
             #if this was the base case, then add this to the set of all moves
             if base_case:
                 all_moves.add(tuple(sorted(move_list)))
+                
+                if len(all_moves) % 2000 == 0:
+                    print(len(all_moves))
     
     """
     brute force approach to finding the best move that can be made,
@@ -762,6 +774,7 @@ class Board:
     def best_move(self, pieces):
         #generate all the possible moves
         all_moves = self.all_possible_moves(pieces)
+        print(len(all_moves))
         best_score = (0,)
         best_moves = None
         #then score all of these scenarios
@@ -1253,10 +1266,11 @@ def rulebook_dice_rolls():
 
 if __name__ == "__main__":
 
-    board = rulebook_game()
-    board.fancy_board_print()
+    #board = rulebook_game()
+    board = Board()
+    #board.fancy_board_print()
     reps = board.find_clusters()
-    print(board.score())
+    #print(board.score())
 #    moves = board.all_possible_moves({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
 #                                      Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1})
     print(board.best_move({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
