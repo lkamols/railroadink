@@ -37,12 +37,17 @@ class RailroadInkSolver:
             dice rolls on that turn
     objective - which objective function to use, the possible objective functions are:
             "expected-score"
+    specials - whether or not to consider special moves in the construction
     """
-    def __init__(self, board, turn, dice_rolls, objective):
+    def __init__(self, board, turn, dice_rolls, objective, specials=True):
         self._board = board
         self._turn = turn
         self._dice_rolls = dice_rolls
         self._objective = objective
+        self._specials = specials
+        #check for if there is even a special to be played, don't add them to the model if there isn't
+        if self._board.all_specials_used():
+            self._specials = False
     
     """
     generates all possible scenarios using the dice rolls. Does this recursively so must be passed lists to build
@@ -75,17 +80,12 @@ class RailroadInkSolver:
     connecting_exits - whether to score points for connecting exits
     longest_paths - whether to score points for the longest paths
     errors - whether to score/lose points for errors
-    specials - whether to consider playing special pieces at all
     lazy_constraints - whether or not to include lazy constraints
     """
     def solve(self, folder="last-run", linear=False, printOutput=False, printD=[], seed=0, tune=0,
-              connecting_exits=True, longest_paths=True, errors=True, specials=True, lazy_constraints=True):
+              connecting_exits=True, longest_paths=True, errors=True, lazy_constraints=True):
         self.longest_paths = longest_paths #needed in the callback
-        
-        #check for if there is even a special to be played, don't add them to the model if there isn't
-        if self._board.all_specials_used():
-            specials = False
-        
+
         self._start_time = time.time()
         
         if folder != None:
@@ -101,7 +101,7 @@ class RailroadInkSolver:
         
         self._create_variables(linear, connecting_exits, longest_paths)
         
-        self._legal_constraints(specials)
+        self._legal_constraints(self._specials)
         if connecting_exits:
             self._joining_exits_constraints() 
         if longest_paths:
@@ -519,8 +519,9 @@ class RailroadInkSolver:
         #these are only calculated for the full scenarios, for d in D
         
         #there must be two starting points and only 2 starting points
+        #the only time this would not be 2 is if there are no length 2 paths on the board
         self.two_ends = {(e,d) :
-            m.addConstr(quicksum(K[s,e,d] for s in I) == 2)
+            m.addConstr(quicksum(K[s,e,d] for s in I) <= 2)
             for e in E for d in D}
             
         #an edge can only score points if it is a start square and has one out connection or has two directional connections
@@ -990,10 +991,10 @@ if __name__ == "__main__":
 #    s.solve(folder="rulebook", printOutput=True, printD="all")
     
     board = Board()
-    dice_rolls = [[DiceRoll({Piece.RAILWAY_CORNER : 1, Piece.HIGHWAY_CORNER : 2,
-                             Piece.STRAIGHT_STATION : 1}, 1)]]
-    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score")
-    s.solve(folder="test", printOutput=True, specials=False, printD="all")
+    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 2,
+                             Piece.CORNER_STATION : 1}, 1)]]
+    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False)
+    s.solve(folder="test", printOutput=True, printD="all")
 
     
 #    board = Board()

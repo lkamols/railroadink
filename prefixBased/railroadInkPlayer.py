@@ -66,7 +66,8 @@ class Player(ABC):
         
  
 """
-the simplest player, gets as many points as possible on every turn
+the simplest player, gets as many points as possible on every turn, delaying all special moves
+until the last 3 turns
 """       
 class GreedyPlayer(Player):
     
@@ -75,28 +76,13 @@ class GreedyPlayer(Player):
     
     #overriding abstract method
     def _move_model(self, board, turn, dice):
-        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score")
+        #only use the special piece if turn > 4 (i.e on the last 3 turns)
+        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score", specials=(turn>4))
+
     
     #overriding abstract method
     def player_name(self):
         return "Greedy"
-    
-    
-"""
-greedy player, with added points for delaying special uses
-"""  
-class GreedyPlayerWithDelayedSpecials(Player):
-    
-    def __init__(self):
-        pass
-    
-    #overriding abstract method
-    def _move_model(self, board, turn, dice):
-        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "delay-specials")
-    
-    #overriding abstract method
-    def player_name(self):
-        return "Delayed Special"
    
 """
 class for simulating dice rolls and generating games
@@ -180,16 +166,16 @@ class Arena:
     
 if __name__ == "__main__":
     
-#    d = DiceRollSimulator(42)
-#    rolls = d.generate_game_rolls()
+    d = DiceRollSimulator(42)
+    rolls = d.generate_game_rolls()
     
-#    g = GreedyPlayer()
-#    g.play_game(rolls, folder="test", printPictures=True)
+    g = GreedyPlayer()
+    g.play_game(rolls, folder="test", printPictures=True, printOutput=True)
     
 #    p = GreedyPlayerWithDelayedSpecials()
 #    p.play_game(rolls, folder="test", printPictures=True)
     
-    competitors = [GreedyPlayer(), GreedyPlayerWithDelayedSpecials()]
-    arena = Arena(competitors)
-    print(arena.test(2))
+#    competitors = [GreedyPlayer(), GreedyPlayerWithDelayedSpecials()]
+#    arena = Arena(competitors)
+#    print(arena.test(2))
     
