@@ -513,6 +513,20 @@ class Board:
         else:
             return [(s[0]+dr,s[1]+dc) for (dr,dc) in directions
                 if (s[0]+dr,s[1]+dc) in self._board]
+      
+    """
+    return list of (square, side) pairs with all the adjacent squares
+    where side is the side of this square
+    """
+    def adjacents_with_sides(self, s, internal=False, forward=False):
+        adjacents = []
+        for side in Side:
+            oppS, _ = self.opposite_edge(s, side)
+            if internal and Board.s_internal(oppS):
+                adjacents += [(oppS, side)]
+            if not internal and s in self._board:
+                adjacents += [(oppS, side)]
+        return adjacents
     
     @staticmethod
     def get_start_squares():
@@ -521,6 +535,10 @@ class Board:
     @staticmethod
     def square_internal(r,c):
         return r >= 0 and r < NUM_ROWS and c >= 0 and c < NUM_ROWS
+    
+    @staticmethod
+    def s_internal(s):
+        return Board.square_internal(s[0],s[1])
     
     
     

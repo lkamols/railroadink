@@ -36,15 +36,17 @@ class RailroadInkSolver:
     dice_rolls - a list of all the remaining dice rolls, with each remaining turn being a list of the possible 
             dice rolls on that turn
     objective - which objective function to use, the possible objective functions are:
-            "expected-score"
+            "expected-score", "open-ends"
     specials - whether or not to consider special moves in the construction
+    open_end_points - an array of the value given to open ends on each turn
     """
-    def __init__(self, board, turn, dice_rolls, objective, specials=True):
+    def __init__(self, board, turn, dice_rolls, objective, specials=True, open_end_points=[1.5, 1.5, 1.3, 1.2, 0.8, 0.5, 0]):
         self._board = board
         self._turn = turn
         self._dice_rolls = dice_rolls
         self._objective = objective
         self._specials = specials
+        self._open_end_points = open_end_points
         #check for if there is even a special to be played, don't add them to the model if there isn't
         if self._board.all_specials_used():
             self._specials = False
@@ -250,6 +252,12 @@ class RailroadInkSolver:
                         else:
                             self.Y[s,ss,e,d] = m.addVar(vtype=GRB.BINARY)
                         self.Y[ss,s,e,d] = self.Y[s,ss,e,d]
+                        
+        #z variables for how many open ends there are attached to any placed piece
+        #only if we are adding points for open ends
+        if self._objective == "open-ends":
+            self.Z = {(s,ss,d) : m.addVar(vtype=GRB.BINARY) for s in I 
+                          for ss in self._board.adjacents(s, internal=True) for d in D}
         
         #CONNECTING START POINTS VARIABLES
         if connecting_exits:
@@ -311,6 +319,7 @@ class RailroadInkSolver:
         #unload the class variables into local variables for ease
         m = self.m
         T = self.T
+        I = self.I
         S = self.S
         C = self.C
         D = self.D
@@ -424,7 +433,20 @@ class RailroadInkSolver:
                     if c != tuple():
                         self.earlier_move_connection[t,s,c] = m.addConstr(X[t,s,c] 
                                 <= quicksum(X[tt,ss,cc] for (ss,tt) in connections for cc in prefixes(c)))
-                                
+                        
+                        
+        #detection of open ends
+        if self._objective == "open-ends":
+            Z = self.Z
+            #only have an open end if there is an edge on that side
+            self._open_end_scoring_1 = {(s,ss,d):
+                m.addConstr(Z[s,ss,d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(side) != EdgeType.B for c in prefixes(d)))
+                for s in I for ss,side in self._board.adjacents_with_sides(s, internal=True) for d in D}           
+              
+            #not an open end if there is anything on the other side
+            self._open_end_scoring_2 = {(s,ss,d): 
+                m.addConstr(Z[s,ss,d] <= 1 - quicksum(X[t,ss,c] for t in T for c in prefixes(d)))
+                for s in I for ss,side in self._board.adjacents_with_sides(s, internal=True) for d in D}
 
     """
     constraints for joining exits
@@ -617,10 +639,18 @@ class RailroadInkSolver:
         #unpack into local variables to make naming cleaner
         m = self.m
         D = self.D
+        S = self.S
+        I = self.I
         Alpha = self.Alpha
         
         if self._objective == "expected-score":
             m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
+        if self._objective == "open-ends":
+            Z = self.Z
+            #score regularly but give some extra points for any open ends according to the scoring array
+            m.setObjective(quicksum((Alpha[d] + quicksum(Z[s,ss,d] for s in I 
+                                     for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._turn-1]) 
+                                    * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
         
        
     """
@@ -993,7 +1023,7 @@ if __name__ == "__main__":
     board = Board()
     dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 2,
                              Piece.CORNER_STATION : 1}, 1)]]
-    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False)
+    s = RailroadInkSolver(board, 1, dice_rolls, "open-ends", specials=False)
     s.solve(folder="test", printOutput=True, printD="all")
 
     
