@@ -1,7 +1,7 @@
 
 from gurobipy import Model, GRB, quicksum
 from gurobipy import *
-from board import Board, Tile, Side, EdgeType, NUM_ROWS, NUM_COLS
+from board import Board, Tile, Side, EdgeType, NUM_ROWS, NUM_COLS, BASIC_PIECES, JUNCTION_PIECES, SPECIAL_PIECES, START_PIECES
 from board import *
 import csv
 import numpy as np
@@ -14,8 +14,6 @@ import time
 RESULTS_FOLDER = "results"
 RESULTS_CSV = "points.csv"
 MOVES_CSV = "moves.csv"
-
-DELAY_SPECIAL_SCORE = 7
 
 
 """
@@ -38,7 +36,7 @@ class RailroadInkSolver:
     dice_rolls - a list of all the remaining dice rolls, with each remaining turn being a list of the possible 
             dice rolls on that turn
     objective - which objective function to use, the possible objective functions are:
-            "expected-score", "delay-specials"
+            "expected-score"
     """
     def __init__(self, board, turn, dice_rolls, objective):
         self._board = board
@@ -77,11 +75,16 @@ class RailroadInkSolver:
     connecting_exits - whether to score points for connecting exits
     longest_paths - whether to score points for the longest paths
     errors - whether to score/lose points for errors
+    specials - whether to consider playing special pieces at all
     lazy_constraints - whether or not to include lazy constraints
     """
     def solve(self, folder="last-run", linear=False, printOutput=False, printD=[], seed=0, tune=0,
-              connecting_exits=True, longest_paths=True, errors=True, lazy_constraints=True):
+              connecting_exits=True, longest_paths=True, errors=True, specials=True, lazy_constraints=True):
         self.longest_paths = longest_paths #needed in the callback
+        
+        #check for if there is even a special to be played, don't add them to the model if there isn't
+        if self._board.all_specials_used():
+            specials = False
         
         self._start_time = time.time()
         
@@ -98,7 +101,7 @@ class RailroadInkSolver:
         
         self._create_variables(linear, connecting_exits, longest_paths)
         
-        self._legal_constraints()
+        self._legal_constraints(specials)
         if connecting_exits:
             self._joining_exits_constraints() 
         if longest_paths:
@@ -304,7 +307,7 @@ class RailroadInkSolver:
     """
     add all of the constraints to do with legal placements and setting of Y (connection) variables
     """
-    def _legal_constraints(self):
+    def _legal_constraints(self, specials):
         #unload the class variables into local variables for ease
         m = self.m
         T = self.T
@@ -335,22 +338,28 @@ class RailroadInkSolver:
                         #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
             for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
     
-        #play special pieces at most once each in every possible dice roll scenario
-        self.special_once = {(p,d):
-                m.addConstr(quicksum(X[t,s,c] for s in S
-                        for t in Tile.get_variations(p) for c in prefixes(d)) <= 1)
-                for p in SPECIAL_PIECES for d in D}
+        if specials:
+            #play special pieces at most once each in every possible dice roll scenario
+            self.special_once = {(p,d):
+                    m.addConstr(quicksum(X[t,s,c] for s in S
+                            for t in Tile.get_variations(p) for c in prefixes(d)) <= 1)
+                    for p in SPECIAL_PIECES for d in D}
+                
+            #play at most one special piece per turn (in every scenario)
+            self.one_special_per_turn = {c :
+                m.addConstr(quicksum(X[t,s,c] for s in S for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=1)
+                for c in C if c != tuple()}  
+                
+            #play max 3 special pieces total, for every single set of full dice rolls
+            self.three_specials_max = {d :
+                m.addConstr(quicksum(X[t,s,c] for s in S for c in prefixes(d)
+                         for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=3)
+                for d in D}
+                
+        else: #specials not played
+            self.no_specials = m.addConstr(quicksum(X[t,s,c] for p in SPECIAL_PIECES for t in Tile.get_variations(p) 
+                                                             for s in S for c in C if c != tuple()) == 0)
             
-        #play at most one special piece per turn (in every scenario)
-        self.one_special_per_turn = {c :
-            m.addConstr(quicksum(X[t,s,c] for s in S for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=1)
-            for c in C if c != tuple()}  
-            
-        #play max 3 special pieces total, for every single set of full dice rolls
-        self.three_specials_max = {d :
-            m.addConstr(quicksum(X[t,s,c] for s in S for c in prefixes(d)
-                     for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=3)
-            for d in D}
             
             
         #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
@@ -425,6 +434,7 @@ class RailroadInkSolver:
         m = self.m
         T = self.T
         S = self.S
+        C = self.C
         D = self.D
         E = self.E
         I = self.I
@@ -479,6 +489,13 @@ class RailroadInkSolver:
             m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum(G[s,o,d] for s in O for o in O if s != o))
             for d in D}
             
+            
+        #if it is turn 1, reduce symmetry by forcing the top left to have more pieces
+        if self._turn == 1:
+            self._symmetry_removal = {
+                    m.addConstr(quicksum(X[t,(row,col),c] for row in range(3) for col in range(3) for t in T ) >=
+                                quicksum(X[t,(row,col),c] for row in range(rS, rS+3) for col in range(cS, cS+3) for t in T ))
+                    for (rS, cS) in [(0,4),(4,0),(4,4)] for c in C if len(c) == 1}
             
 #        self.transitivity_removal = {(s, ss, sss) :
 #            m.addConstr(G[ss,s,d] <= 1 - G[sss,ss,d])
@@ -598,21 +615,11 @@ class RailroadInkSolver:
     def _set_objective(self):
         #unpack into local variables to make naming cleaner
         m = self.m
-        S = self.S
         D = self.D
-        X = self.X
         Alpha = self.Alpha
         
         if self._objective == "expected-score":
             m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
-        if self._objective == "delay-specials":
-            #if there are more moves to play the specials on, give an additional score for delaying their use
-            if 8 - self._turn > 3 - self._board.count_specials_used():
-                m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D) +
-                               DELAY_SPECIAL_SCORE * (1 - quicksum(X[t,s,(0,)] for s in S for 
-                                        p in SPECIAL_PIECES for t in Tile.get_variations(p))), GRB.MAXIMIZE)
-            else:
-                m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
         
        
     """
@@ -940,10 +947,7 @@ class RailroadInkSolver:
         #if there were no isolated pieces, then all pieces were added to the board in the earlier process
         missingPieces = self._find_missing_pieces(playedTiles, pieceCounts)
         
-        print(missingPieces)
-        
         canPlaceMissingPiece = self._can_place_a_missing_piece(missingPieces)
-        print(canPlaceMissingPiece)
         if canPlaceMissingPiece:
             m.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in playedTiles) #we can move an already played tile
                             + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) 
@@ -988,8 +992,8 @@ if __name__ == "__main__":
     board = Board()
     dice_rolls = [[DiceRoll({Piece.RAILWAY_CORNER : 1, Piece.HIGHWAY_CORNER : 2,
                              Piece.STRAIGHT_STATION : 1}, 1)]]
-    s = RailroadInkSolver(board, 1, dice_rolls, "delay-specials")
-    s.solve(folder="error-test", printOutput=True, printD="all")
+    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score")
+    s.solve(folder="test", printOutput=True, specials=False, printD="all")
 
     
 #    board = Board()
