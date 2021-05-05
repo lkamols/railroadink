@@ -1284,13 +1284,13 @@ def rulebook_dice_rolls():
 
 if __name__ == "__main__":
 
-    #board = rulebook_game()
-    board = Board()
-    #board.fancy_board_print()
+    board = rulebook_game()
+    #board = Board()
+    board.fancy_board_print("turn-6.png")
     reps = board.find_clusters()
     #print(board.score())
 #    moves = board.all_possible_moves({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
 #                                      Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1})
-    print(board.best_move({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
-                           Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}))
+#    print(board.best_move({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
+#                           Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}))
     

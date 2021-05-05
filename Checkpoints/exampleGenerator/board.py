@@ -1101,11 +1101,11 @@ def rulebook_game():
     board.add_tile(6, 3, Piece.RAILWAY_T, Rotation.R90)
     board.add_tile(6, 4, Piece.RAILWAY_STRAIGHT, Rotation.R90)
     board.add_tile(6, 5, Piece.CORNER_STATION, Rotation.R270, flip=False)
-    board.add_tile(0, 3, Piece.RAILWAY_STRAIGHT, Rotation.I)
-    board.add_tile(0, 4, Piece.OVERPASS, Rotation.I)
-    board.add_tile(2, 4, Piece.HIGHWAY_STRAIGHT, Rotation.R90)
-    board.add_tile(4, 5, Piece.CORNER_JUNCTION, Rotation.I)
-    board.add_tile(5, 5, Piece.RAILWAY_CORNER, Rotation.R90)
+    #board.add_tile(0, 3, Piece.RAILWAY_STRAIGHT, Rotation.I)
+    #board.add_tile(0, 4, Piece.HIGHWAY_STRAIGHT, Rotation.I)
+    #board.add_tile(2, 4, Piece.OVERPASS, Rotation.R90)
+    #board.add_tile(4, 5, Piece.THREE_H_JUNCTION, Rotation.I)
+    #board.add_tile(5, 5, Piece.RAILWAY_CORNER, Rotation.R90)
     return board
 
 """

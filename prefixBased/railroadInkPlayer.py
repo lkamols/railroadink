@@ -29,7 +29,7 @@ class Player(ABC):
                 turnFolder = "{0}/{1}".format(folder, turn)
             
             #firstly we generate the move
-            s = self._move_model(board, turn, actual_dice_rolls[turn])
+            s = self._move_model(board, turn, actual_dice_rolls[turn-1])
             
             
             s.solve(folder=turnFolder, printOutput=printOutput)
@@ -78,6 +78,7 @@ class GreedyPlayer(Player):
     def _move_model(self, board, turn, dice):
         #only use the special piece if turn > 4 (i.e on the last 3 turns)
         return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score", specials=(turn>4))
+        #return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score")
 
     
     #overriding abstract method
@@ -170,7 +171,7 @@ if __name__ == "__main__":
     rolls = d.generate_game_rolls()
     
     g = GreedyPlayer()
-    g.play_game(rolls, folder="test", printPictures=True, printOutput=True)
+    g.play_game(rolls, folder="greedy-delayed", printPictures=True, printOutput=True)
     
 #    p = GreedyPlayerWithDelayedSpecials()
 #    p.play_game(rolls, folder="test", printPictures=True)
