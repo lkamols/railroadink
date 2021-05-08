@@ -524,7 +524,7 @@ class Board:
             oppS, _ = self.opposite_edge(s, side)
             if internal and Board.s_internal(oppS):
                 adjacents += [(oppS, side)]
-            if not internal and s in self._board:
+            if not internal and oppS in self._board:
                 adjacents += [(oppS, side)]
         return adjacents
     

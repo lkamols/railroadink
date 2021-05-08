@@ -84,6 +84,22 @@ class GreedyPlayer(Player):
     #overriding abstract method
     def player_name(self):
         return "Greedy"
+    
+    
+class OpenEndsPlayer(Player):
+    
+    def __init__(self):
+        pass
+    
+    #overriding abstract method
+    def _move_model(self, board, turn, dice):
+        #only use the special piece if turn > 4 (i.e on the last 3 turns)
+        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "open-ends", specials=(turn>4))
+
+    
+    #overriding abstract method
+    def player_name(self):
+        return "Open Ends"
    
 """
 class for simulating dice rolls and generating games
@@ -170,8 +186,12 @@ if __name__ == "__main__":
     d = DiceRollSimulator(42)
     rolls = d.generate_game_rolls()
     
-    g = GreedyPlayer()
-    g.play_game(rolls, folder="greedy-delayed", printPictures=True, printOutput=True)
+    
+    o = OpenEndsPlayer()
+    o.play_game(rolls, folder="open-ends", printPictures=True, printOutput=True)
+    
+    #g = GreedyPlayer()
+    #g.play_game(rolls, folder="greedy-delayed", printPictures=True, printOutput=True)
     
 #    p = GreedyPlayerWithDelayedSpecials()
 #    p.play_game(rolls, folder="test", printPictures=True)
