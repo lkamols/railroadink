@@ -94,13 +94,31 @@ class OpenEndsPlayer(Player):
     #overriding abstract method
     def _move_model(self, board, turn, dice):
         #only use the special piece if turn > 4 (i.e on the last 3 turns)
-        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "open-ends", specials=(turn>4))
+        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "open-ends", isolated_pieces="relief",specials=(turn>4))
 
     
     #overriding abstract method
     def player_name(self):
         return "Open Ends"
-   
+    
+    
+class OnePieceLookAheadPlayer(Player):
+    
+    def __init__(self):
+        pass
+    
+    def _move_model(self, board, turn, dice):
+        #unless it is the last move, make the move with a look ahead with one extra piece of each
+        if turn == 7:
+            diceRoll = [[DiceRoll(dice, 1)]]
+        else:
+            diceRoll = [[DiceRoll(dice, 1)],[DiceRoll({piece: 1},1/9) for piece in BASIC_PIECES + JUNCTION_PIECES]]
+        #only use the special piece if turn > 4 (i.e on the last 3 turns)
+        return RailroadInkSolver(board, turn, diceRoll, "expected-score", isolated_pieces="relief",specials=(turn>4))
+    
+    def player_name(self):
+        return "One Piece Look Ahead"
+    
 """
 class for simulating dice rolls and generating games
 """
@@ -186,9 +204,11 @@ if __name__ == "__main__":
     d = DiceRollSimulator(42)
     rolls = d.generate_game_rolls()
     
+    la = OnePieceLookAheadPlayer()
+    la.play_game(rolls, folder="one-piece-look-ahead", printPictures=True, printOutput=True)
     
-    o = OpenEndsPlayer()
-    o.play_game(rolls, folder="open-ends", printPictures=True, printOutput=True)
+#    o = OpenEndsPlayer()
+#    o.play_game(rolls, folder="open-ends", printPictures=True, printOutput=True)
     
     #g = GreedyPlayer()
     #g.play_game(rolls, folder="greedy-delayed", printPictures=True, printOutput=True)

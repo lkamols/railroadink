@@ -107,7 +107,7 @@ class RailroadInkSolver:
         
         self._create_variables(linear, connecting_exits, longest_paths)
         
-        self._legal_constraints(self._specials)
+        self._legal_constraints()
         if connecting_exits:
             self._joining_exits_constraints() 
         if longest_paths:
@@ -323,7 +323,7 @@ class RailroadInkSolver:
     """
     add all of the constraints to do with legal placements and setting of Y (connection) variables
     """
-    def _legal_constraints(self, specials):
+    def _legal_constraints(self):
         #unload the class variables into local variables for ease
         m = self.m
         T = self.T
@@ -355,7 +355,7 @@ class RailroadInkSolver:
                         #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
             for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
     
-        if specials:
+        if self._specials:
             #play special pieces at most once each in every possible dice roll scenario
             self.special_once = {(p,d):
                     m.addConstr(quicksum(X[t,s,c] for s in S
@@ -1056,10 +1056,31 @@ if __name__ == "__main__":
 #    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
 #    s.solve(folder="rulebook", printOutput=True, printD="all")
     
-    board = Board()
-    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 2,
-                             Piece.CORNER_STATION : 1}, 1)]]
-    #s = RailroadInkSolver(board, 1, dice_rolls, "open-ends", specials=False, isolated_pieces="relief")
-    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, isolated_pieces="relief")
-    s.solve(folder="test", printOutput=True, printD="all")
+    #board = Board()
+#    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1)],
+#                   [DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1)]]
+#    #s = RailroadInkSolver(board, 1, dice_rolls, "open-ends", specials=False, isolated_pieces="relief")
+#    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, isolated_pieces="relief")
+#    s.solve(folder="test", printOutput=True, printD="all")
 
+    board = Board()
+    
+#    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+#                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
+#                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)]]
+    
+    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1.0/9),
+                   DiceRoll({Piece.RAILWAY_CORNER : 1}, 1.0/9),
+                   DiceRoll({Piece.RAILWAY_T : 1}, 1.0/9),
+                   DiceRoll({Piece.HIGHWAY_STRAIGHT : 1}, 1.0/9),
+                   DiceRoll({Piece.HIGHWAY_CORNER : 1}, 1.0/9),
+                   DiceRoll({Piece.HIGHWAY_T : 1}, 1.0/9),
+                   DiceRoll({Piece.STRAIGHT_STATION : 1}, 1.0/9),
+                   DiceRoll({Piece.CORNER_STATION : 1}, 1.0/9),
+                   DiceRoll({Piece.OVERPASS : 1}, 1.0/9)]]
+    
+    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, isolated_pieces="relief")
+    s.solve(folder="test", printOutput=True, printD="all")  
