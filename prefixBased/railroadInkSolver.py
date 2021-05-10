@@ -36,19 +36,22 @@ class RailroadInkSolver:
     dice_rolls - a list of all the remaining dice rolls, with each remaining turn being a list of the possible 
             dice rolls on that turn
     objective - which objective function to use, the possible objective functions are:
-            "expected-score", "open-ends"
+            "expected-score"
     specials - whether or not to consider special moves in the construction
     isolated_pieces - how to handle isolated pieces, options are "lazy" for using lazy constraints or "relief"
             for using a flow problem
+    open_ends - whether to attribute any points for open ends
     open_end_points - an array of the value given to open ends on each turn
     """
     def __init__(self, board, turn, dice_rolls, objective, specials=True, 
-                 isolated_pieces="lazy", open_end_points=[1.5, 1.5, 1.3, 1.2, 0.8, 0.5, 0]):
+                 isolated_pieces="lazy",
+                 open_ends=False, open_end_points=[2.5, 2.5, 2, 1.6, 1.4, 0.5, 0]):
         self._board = board
         self._turn = turn
         self._dice_rolls = dice_rolls
         self._objective = objective
         self._specials = specials
+        self._open_ends = open_ends
         self._open_end_points = open_end_points
         self._isolated_pieces = isolated_pieces
         #check for if there is even a special to be played, don't add them to the model if there isn't
@@ -265,7 +268,7 @@ class RailroadInkSolver:
                         
         #z variables for how many open ends there are attached to any placed piece
         #only if we are adding points for open ends
-        if self._objective == "open-ends":
+        if self._open_ends:
             self.Z = {(s,ss,d) : m.addVar(vtype=GRB.BINARY) for s in I 
                           for ss in self._board.adjacents(s, internal=True) for d in D}
             
@@ -410,28 +413,6 @@ class RailroadInkSolver:
                                     for c in prefixes(d)) <= 1) 
             for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
             
-        #constraints for if there are connections on any horizontal edges
-        #Y variables only defined at the end, so they can be set if any of the X value prefixes are set
-        #these are split up into two constraints to improve the LP relaxation
-        #only define these rules for the full dice roll
-#        self.left_connections = {(s,e,d) :
-#            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)))
-#            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
-#            
-#        self.right_connections = {(s,e,d) :
-#            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,(s[0],s[1]+1),c] for t in T if t.get_edge_type_on_side(Side.LEFT) == e for c in prefixes(d)))
-#            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
-            
-        #constraints for if there are connections on any vertical edges
-        #scenario definition as above   
-#        self.top_connections = {(s,e,d) :
-#            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)))
-#            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
-#        
-#        self.bottom_connections = {(s,e,d) :
-#            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
-#            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
-            
             
         #determine which constraints are being added based on how the isolated placements are being handled
         if self._isolated_pieces == "relief":
@@ -477,7 +458,7 @@ class RailroadInkSolver:
                         
                         
         #detection of open ends
-        if self._objective == "open-ends":
+        if self._open_ends:
             Z = self.Z
             #only have an open end if there is an edge on that side
             self._open_end_scoring_1 = {(s,ss,d):
@@ -487,7 +468,7 @@ class RailroadInkSolver:
             #not an open end if there is anything on the other side
             self._open_end_scoring_2 = {(s,ss,d): 
                 m.addConstr(Z[s,ss,d] <= 1 - quicksum(X[t,ss,c] for t in T for c in prefixes(d)))
-                for s in I for ss,side in self._board.adjacents_with_sides(s, internal=True) for d in D}
+                for s in I for ss in self._board.adjacents(s,internal=True) for d in D}
 
     """
     constraints for joining exits
@@ -684,13 +665,13 @@ class RailroadInkSolver:
         Alpha = self.Alpha
         
         if self._objective == "expected-score":
-            m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
-        if self._objective == "open-ends":
-            Z = self.Z
+            #m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
             #score regularly but give some extra points for any open ends according to the scoring array
-            m.setObjective(quicksum((Alpha[d] + quicksum(Z[s,ss,d] for s in I 
-                                     for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._turn-1]) 
+            m.setObjective(quicksum((Alpha[d] + 
+                                     (quicksum(self.Z[s,ss,d] for s in I for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._turn-1] 
+                                             if self._open_ends else 0)) 
                                     * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
+            
         
        
     """
@@ -793,9 +774,12 @@ class RailroadInkSolver:
         resultsFile = folder + "/" + RESULTS_CSV
         with open(resultsFile, mode="w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=",")
-            csv_writer.writerow(["Turn {0}".format(self._turn + i) for i in range(len(self._dice_rolls))] + 
-                                 ["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors", "Bonus Point"])
+            title_row = ["Turn {0}".format(self._turn + i) for i in range(len(self._dice_rolls))]
+            title_row += ["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors", "Bonus Point"]
+            title_row += ["Open Ends"] if self._open_ends else []
+            csv_writer.writerow(title_row)
             for d in D:
+                #do the calculations
                 score = round(Alpha[d].x)
                 centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)))
                 connecting_exits = (round(4 * sum(G[s,o,d].x for s in O for o in O if s != o)) if connecting_exits else 0)
@@ -805,8 +789,14 @@ class RailroadInkSolver:
                               + sum(Y[s,ss,e,dd].x for (s,ss,e,dd) in Y if dd == d and s in I and ss in I))
                                 if errors else 0)
                 bonus_point = round(J[d].x)
-                csv_writer.writerow([turn for turn in d] + [score, connecting_exits, longest_railway, 
-                                                            longest_highway, centre_points, errors, bonus_point])
+                score_row = [turn for turn in d] + [score, connecting_exits, longest_railway, 
+                                                            longest_highway, centre_points, errors, bonus_point]
+                if self._open_ends:
+                    Z = self.Z
+                    open_ends = round(sum(Z[s,ss,d].x for s in I for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._turn-1],2)
+                    score_row += [open_ends]
+                
+                csv_writer.writerow(score_row)
     
         #also create a csv for the moves that were made
         movesFile = folder + "/" + MOVES_CSV

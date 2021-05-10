@@ -94,7 +94,7 @@ class OpenEndsPlayer(Player):
     #overriding abstract method
     def _move_model(self, board, turn, dice):
         #only use the special piece if turn > 4 (i.e on the last 3 turns)
-        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "open-ends", isolated_pieces="relief",specials=(turn>4))
+        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score", isolated_pieces="relief", open_ends=True, specials=(turn>4))
 
     
     #overriding abstract method
@@ -195,7 +195,6 @@ class Arena:
             #now add to the wins of all the winners, less points the more winners there were
             for winner in winners:
                 wins[winner] += 1 / len(winners)
-        
         return wins
     
     
@@ -204,11 +203,11 @@ if __name__ == "__main__":
     d = DiceRollSimulator(42)
     rolls = d.generate_game_rolls()
     
-    la = OnePieceLookAheadPlayer()
-    la.play_game(rolls, folder="one-piece-look-ahead", printPictures=True, printOutput=True)
+#    la = OnePieceLookAheadPlayer()
+#    la.play_game(rolls, folder="one-piece-look-ahead", printPictures=True, printOutput=True)
     
-#    o = OpenEndsPlayer()
-#    o.play_game(rolls, folder="open-ends", printPictures=True, printOutput=True)
+    o = OpenEndsPlayer()
+    o.play_game(rolls, folder="open-ends", printPictures=True, printOutput=True)
     
     #g = GreedyPlayer()
     #g.play_game(rolls, folder="greedy-delayed", printPictures=True, printOutput=True)
