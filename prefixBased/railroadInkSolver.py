@@ -246,6 +246,7 @@ class RailroadInkSolver:
         #these variables are only calculated at the end of the scenarios, not during
         #for ease, create entries in the opposite direction that point to the same variables
         #e.g Y[s,ss,e,d] = Y[ss,s,e,d] for all values
+        #V is for whether there is a connection on each side      
         self.Y = {}
         for s in S:
             for e in E:
@@ -256,6 +257,11 @@ class RailroadInkSolver:
                         else:
                             self.Y[s,ss,e,d] = m.addVar(vtype=GRB.BINARY)
                         self.Y[ss,s,e,d] = self.Y[s,ss,e,d]
+                    
+        if linear:
+            self.V = {(s,ss,e,d) : m.addVar(ub=1) for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+        else:
+            self.V = {(s,ss,e,d) : m.addVar(ub=1) for s in S for ss in self._board.adjacents(s) for e in E for d in D}
                         
         #z variables for how many open ends there are attached to any placed piece
         #only if we are adding points for open ends
@@ -332,6 +338,7 @@ class RailroadInkSolver:
         C = self.C
         D = self.D
         E = self.E
+        V = self.V
         X = self.X
         Y = self.Y
 
@@ -377,7 +384,14 @@ class RailroadInkSolver:
             self.no_specials = m.addConstr(quicksum(X[t,s,c] for p in SPECIAL_PIECES for t in Tile.get_variations(p) 
                                                              for s in S for c in C if c != tuple()) == 0)
             
+        #determine the V values, which are whether there is a route on a square on the edge of s that borders ss
+        self.v_values = {(s,ss,e,d) :
+            m.addConstr(V[s,ss,e,d] == quicksum(X[t,s,c] for c in prefixes(d) for t in T if t.get_edge_type_on_side(side) == e))
+            for s in S for ss,side in self._board.adjacents_with_sides(s) for e in E for d in D}
             
+        self.connections = {(s,ss,e,d) :
+            m.addConstr(Y[s,ss,e,d] <= V[s,ss,e,d])
+            for s in S for ss,side in self._board.adjacents_with_sides(s) for e in E for d in D}
             
         #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
         #this needs to hold across every final scenario, only consider the final scenarios as the earlier ones are
@@ -390,7 +404,7 @@ class RailroadInkSolver:
             
         #constraints for clashes on edges joining squares vertically, preventing railways & highways connecting
         #scenario logic as for above constraints
-        self. vertical_clashes = {(s,e,d) :
+        self.vertical_clashes = {(s,e,d) :
             m.addConstr(quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)) +
                         quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == EdgeType.clash_type(e) 
                                     for c in prefixes(d)) <= 1) 
@@ -400,23 +414,23 @@ class RailroadInkSolver:
         #Y variables only defined at the end, so they can be set if any of the X value prefixes are set
         #these are split up into two constraints to improve the LP relaxation
         #only define these rules for the full dice roll
-        self.left_connections = {(s,e,d) :
-            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)))
-            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
-            
-        self.right_connections = {(s,e,d) :
-            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,(s[0],s[1]+1),c] for t in T if t.get_edge_type_on_side(Side.LEFT) == e for c in prefixes(d)))
-            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
+#        self.left_connections = {(s,e,d) :
+#            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.RIGHT) == e for c in prefixes(d)))
+#            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
+#            
+#        self.right_connections = {(s,e,d) :
+#            m.addConstr(Y[s, (s[0], s[1]+1), e, d] <= quicksum(X[t,(s[0],s[1]+1),c] for t in T if t.get_edge_type_on_side(Side.LEFT) == e for c in prefixes(d)))
+#            for s in S if (s[0],s[1]+1) in S for e in E for d in D}
             
         #constraints for if there are connections on any vertical edges
         #scenario definition as above   
-        self.top_connections = {(s,e,d) :
-            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)))
-            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
-        
-        self.bottom_connections = {(s,e,d) :
-            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
-            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+#        self.top_connections = {(s,e,d) :
+#            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(Side.BOTTOM) == e for c in prefixes(d)))
+#            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
+#        
+#        self.bottom_connections = {(s,e,d) :
+#            m.addConstr(Y[s, (s[0]+1, s[1]), e, d] <= quicksum(X[t,(s[0]+1,s[1]),c] for t in T if t.get_edge_type_on_side(Side.TOP) == e for c in prefixes(d)))
+#            for s in S if (s[0]+1,s[1]) in S for e in E for d in D}
             
             
         #determine which constraints are being added based on how the isolated placements are being handled
@@ -1051,10 +1065,10 @@ class EmptyPrinter:
     
         
 if __name__ == "__main__":
-#    board = rulebook_game()
-#    dice_rolls = rulebook_dice_rolls()
-#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-#    s.solve(folder="rulebook", printOutput=True, printD="all")
+    board = rulebook_game()
+    dice_rolls = rulebook_dice_rolls()
+    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+    s.solve(folder="rulebook", printOutput=True, printD="all")
     
     #board = Board()
 #    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1)],
@@ -1063,24 +1077,24 @@ if __name__ == "__main__":
 #    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, isolated_pieces="relief")
 #    s.solve(folder="test", printOutput=True, printD="all")
 
-    board = Board()
-    
+#    board = Board()
+#    
+##    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+##                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+##                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
+##                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)]]
+#    
 #    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
 #                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
-#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
-#                             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)]]
-    
-    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
-                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
-                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1.0/9),
-                   DiceRoll({Piece.RAILWAY_CORNER : 1}, 1.0/9),
-                   DiceRoll({Piece.RAILWAY_T : 1}, 1.0/9),
-                   DiceRoll({Piece.HIGHWAY_STRAIGHT : 1}, 1.0/9),
-                   DiceRoll({Piece.HIGHWAY_CORNER : 1}, 1.0/9),
-                   DiceRoll({Piece.HIGHWAY_T : 1}, 1.0/9),
-                   DiceRoll({Piece.STRAIGHT_STATION : 1}, 1.0/9),
-                   DiceRoll({Piece.CORNER_STATION : 1}, 1.0/9),
-                   DiceRoll({Piece.OVERPASS : 1}, 1.0/9)]]
-    
-    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, isolated_pieces="relief")
-    s.solve(folder="test", printOutput=True, printD="all")  
+#                  [DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1.0/9),
+#                   DiceRoll({Piece.RAILWAY_CORNER : 1}, 1.0/9),
+#                   DiceRoll({Piece.RAILWAY_T : 1}, 1.0/9),
+#                   DiceRoll({Piece.HIGHWAY_STRAIGHT : 1}, 1.0/9),
+#                   DiceRoll({Piece.HIGHWAY_CORNER : 1}, 1.0/9),
+#                   DiceRoll({Piece.HIGHWAY_T : 1}, 1.0/9),
+#                   DiceRoll({Piece.STRAIGHT_STATION : 1}, 1.0/9),
+#                   DiceRoll({Piece.CORNER_STATION : 1}, 1.0/9),
+#                   DiceRoll({Piece.OVERPASS : 1}, 1.0/9)]]
+#    
+#    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, isolated_pieces="relief")
+#    s.solve(folder="test", printOutput=True, printD="all")  
