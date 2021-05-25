@@ -40,23 +40,44 @@ class RailroadInkSolver:
     specials - whether or not to consider special moves in the construction
     isolated_pieces - how to handle isolated pieces, options are "lazy" for using lazy constraints or "relief"
             for using a flow problem
+    connecting_exits - whether to score points for connecting exits
+    longest_paths - whether to score points for the longest paths
+    errors - whether to score/lose points for errors
     open_ends - whether to attribute any points for open ends
     open_end_points - an array of the value given to open ends on each turn
+    fake_connections - whether fake connections can be added (which cost points)
+    fake_connections_cost - the cost associated with any fake placements
+    fake_connections_max - the maximum number of fake connections that can be made on any turn
+    internal_sinks - if True, then adds framework for connecting exits internally to ensure they are not closed off
+    internal_sink_scores - determines how many points are scored for internal super sink connections each turn
     """
     def __init__(self, board, turn, dice_rolls, objective, specials=True, 
                  isolated_pieces="lazy",
-                 open_ends=False, open_end_points=[2.5, 2.5, 2, 1.6, 1.4, 0.5, 0]):
+                 connecting_exits=True, longest_paths=True, errors=True,
+                 open_ends=False, open_end_points=[2.5, 2.5, 2, 1.6, 1.4, 0.5, 0],
+                 fake_connections=False, fake_connections_cost=[0.6,0.6,0.8,1,1.5,2.5,4], fake_connections_max=[6,10,18,16,12,6,0],
+                 internal_sinks=False, internal_sink_scores=[3,3,2.5,2,1.5,1,0]):
         self._board = board
         self._turn = turn
         self._dice_rolls = dice_rolls
         self._objective = objective
         self._specials = specials
+        self._isolated_pieces = isolated_pieces
+        self._connecting_exits = connecting_exits
+        self._longest_paths = longest_paths
+        self._errors = errors
         self._open_ends = open_ends
         self._open_end_points = open_end_points
-        self._isolated_pieces = isolated_pieces
+        self._fake_connections = fake_connections
+        self._fake_connections_cost = fake_connections_cost
+        self._fake_connections_max = fake_connections_max
+        self._internal_sinks = internal_sinks
+        self._internal_sink_scores = internal_sink_scores
         #check for if there is even a special to be played, don't add them to the model if there isn't
         if self._board.all_specials_used():
             self._specials = False
+        #calculate the turn index for the final move for indexing into scoring arrays
+        self._end_turn_index = self._turn - 2 + len(dice_rolls)
     
     """
     generates all possible scenarios using the dice rolls. Does this recursively so must be passed lists to build
@@ -86,14 +107,10 @@ class RailroadInkSolver:
     printD - a list of scenarios to print, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
     tune - if non-zero, will perform a tune with the given length of time instead of a normal search
-    connecting_exits - whether to score points for connecting exits
-    longest_paths - whether to score points for the longest paths
-    errors - whether to score/lose points for errors
     lazy_constraints - whether or not to include lazy constraints
     """
     def solve(self, folder="last-run", linear=False, printOutput=False, printD=[], seed=0, tune=0,
-              connecting_exits=True, longest_paths=True, errors=True, lazy_constraints=True):
-        self.longest_paths = longest_paths #needed in the callback
+              lazy_constraints=True):
 
         self._start_time = time.time()
         
@@ -108,14 +125,14 @@ class RailroadInkSolver:
         
         self._create_sets()
         
-        self._create_variables(linear, connecting_exits, longest_paths)
+        self._create_variables(linear)
         
         self._legal_constraints()
-        if connecting_exits:
+        if self._connecting_exits:
             self._joining_exits_constraints() 
-        if longest_paths:
+        if self._longest_paths:
             self._longest_path_constraints()
-        self._scoring_constraints(connecting_exits, longest_paths, errors)
+        self._scoring_constraints()
         
         
         self._set_objective()
@@ -147,7 +164,7 @@ class RailroadInkSolver:
             self._print_scenarios(printD, folder)
             
             #make the csv
-            self._make_csv(folder, connecting_exits, longest_paths, errors)
+            self._make_csv(folder)
             
         self._end_time = time.time()
         #don't have any return values, instead we can get the results from the class
@@ -223,7 +240,7 @@ class RailroadInkSolver:
     create all the variables used in the Railroad Ink problem, if linear is True, then define the variables to
     form an LP else define them as integers
     """
-    def _create_variables(self, linear, connecting_exits, longest_paths):
+    def _create_variables(self, linear):
         #unload the class variables into local variables for ease
         m = self.m
         T = self.T
@@ -249,7 +266,7 @@ class RailroadInkSolver:
         #these variables are only calculated at the end of the scenarios, not during
         #for ease, create entries in the opposite direction that point to the same variables
         #e.g Y[s,ss,e,d] = Y[ss,s,e,d] for all values
-        #V is for whether there is a connection on each side      
+            
         self.Y = {}
         for s in S:
             for e in E:
@@ -260,12 +277,21 @@ class RailroadInkSolver:
                         else:
                             self.Y[s,ss,e,d] = m.addVar(vtype=GRB.BINARY)
                         self.Y[ss,s,e,d] = self.Y[s,ss,e,d]
-                    
+        
+        #V is for whether there is a connection on each side  
         if linear:
             self.V = {(s,ss,e,d) : m.addVar(ub=1) for s in S for ss in self._board.adjacents(s) for e in E for d in D}
         else:
             self.V = {(s,ss,e,d) : m.addVar(ub=1) for s in S for ss in self._board.adjacents(s) for e in E for d in D}
-                        
+          
+        #w variables are for any fake connections made
+        if self._fake_connections:
+            if linear:
+                self.W = {(s,ss,e,d) : m.addVar(ub=1) for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+            else:
+                self.W = {(s,ss,e,d) : m.addVar(ub=1) for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+            
+              
         #z variables for how many open ends there are attached to any placed piece
         #only if we are adding points for open ends
         if self._open_ends:
@@ -277,7 +303,7 @@ class RailroadInkSolver:
             self.R = {(s,ss,c) : m.addVar() for s in S for ss in self._board.adjacents(s) for c in C if c != tuple()}
         
         #CONNECTING START POINTS VARIABLES
-        if connecting_exits:
+        if self._connecting_exits:
             #each of these is defined for every single possible set of dice rolls d in D
             #the flow problem is also defined for every start square 'o'
             #these are all linear variables since we start with only 1 as an input
@@ -295,9 +321,15 @@ class RailroadInkSolver:
             else:
                 self.J = {d : m.addVar(vtype=GRB.BINARY) for d in D}
                 self.G = {(s,o,d) : m.addVar(vtype=GRB.BINARY) for s in O for o in O for d in D} 
+                
+            #Q variables are for the internal super sink connections, so any connection to the super sink can be via an internal edge
+            #if that is an open end
+            if self._internal_sinks:
+                self.Q = {(s,ss,o,e,d) : m.addVar(vtype=GRB.BINARY) for s in S for ss in self._board.adjacents(s) 
+                        for o in O for e in E for d in D}
         
         #LONGEST RAILWAY/HIGHWAY VARIABLES
-        if longest_paths:
+        if self._longest_paths:
             #each of these is defined for every single possible set of dice rolls d in D
             #whether square s is an end square of the path
             if linear:
@@ -391,10 +423,29 @@ class RailroadInkSolver:
         self.v_values = {(s,ss,e,d) :
             m.addConstr(V[s,ss,e,d] == quicksum(X[t,s,c] for c in prefixes(d) for t in T if t.get_edge_type_on_side(side) == e))
             for s in S for ss,side in self._board.adjacents_with_sides(s) for e in E for d in D}
+        
+        if self._fake_connections:
+            W = self.W
             
-        self.connections = {(s,ss,e,d) :
-            m.addConstr(Y[s,ss,e,d] <= V[s,ss,e,d])
-            for s in S for ss,side in self._board.adjacents_with_sides(s) for e in E for d in D}
+            #cannot have any fake connections where a piece is already played
+            self.invalid_ws = {(s,ss,e,d) :
+                m.addConstr(W[s,ss,e,d] <= 1 - quicksum(X[t,s,c] for t in T for c in prefixes(d)))
+                for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+                
+            #cap the number of fake connections that can be made based on how many turns are remaining
+            self.fake_connection_caps = {d :
+                m.addConstr(quicksum(W[s,ss,e,d] for s in S for ss in self._board.adjacents(s) for e in E) <= self._fake_connections_max[self._end_turn_index])
+                for d in D}
+                
+            #can have a connection on an edge from either side if there is a real placement or a fake placement
+            self.connections = {(s,ss,e,d) :
+                m.addConstr(Y[s,ss,e,d] <= V[s,ss,e,d] + W[s,ss,e,d])
+                for s in S for ss,side in self._board.adjacents_with_sides(s) for e in E for d in D}
+        else: 
+            #can have a connection on an edge only if there is actually a connection there
+            self.connections = {(s,ss,e,d) :
+                m.addConstr(Y[s,ss,e,d] <= V[s,ss,e,d])
+                for s in S for ss,side in self._board.adjacents_with_sides(s) for e in E for d in D}
             
         #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
         #this needs to hold across every final scenario, only consider the final scenarios as the earlier ones are
@@ -462,7 +513,7 @@ class RailroadInkSolver:
             Z = self.Z
             #only have an open end if there is an edge on that side
             self._open_end_scoring_1 = {(s,ss,d):
-                m.addConstr(Z[s,ss,d] <= quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(side) != EdgeType.B for c in prefixes(d)))
+                m.addConstr(Z[s,ss,d] <=  quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(side) != EdgeType.B for c in prefixes(d)))
                 for s in I for ss,side in self._board.adjacents_with_sides(s, internal=True) for d in D}           
               
             #not an open end if there is anything on the other side
@@ -483,6 +534,7 @@ class RailroadInkSolver:
         E = self.E
         I = self.I
         O = self.O
+        V = self.V
         X = self.X
         Y = self.Y
         F = self.F
@@ -494,18 +546,44 @@ class RailroadInkSolver:
         #the internal constraints also exist for every possible origin square o in O
         
         #the flow into an internal square must be the same as the flow out
-        self.internal_flows = {(s,o,e,d) :
-            m.addConstr(quicksum(F[s,ss,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,e,d] ==
-                        quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,EdgeType.clash_type(e),d])
-            for s in I for o in O for e in E for d in D}
+        if not self._internal_sinks:
+            self.internal_flows = {(s,o,e,d) :
+                m.addConstr(quicksum(F[s,ss,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,e,d] ==
+                            quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,EdgeType.clash_type(e),d])
+                for s in I for o in O for e in E for d in D}
             
-        #the flow into an external square must be the same as the flow out
-        #these have a guaranteed flow in of 1 when we are at the origin of this flow problem o
-        #they also have the ability to flow out to the sink with variable G
-        self.external_flows = {(s,o,d) :
-            m.addConstr((1 if s == o else 0) + quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s) for e in E) ==
+            #the flow into an external square must be the same as the flow out
+            #these have a guaranteed flow in of 1 when we are at the origin of this flow problem o
+            #they also have the ability to flow out to the sink with variable G
+            self.external_flows = {(s,o,d) :
+                m.addConstr((1 if s == o else 0) + quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s) for e in E) ==
                         quicksum(F[s,ss,o,e,d] for ss in self._board.adjacents(s) for e in E) + G[s,o,d])
-            for s in O for o in O for d in D}
+                for s in O for o in O for d in D}
+        else:
+            Q = self.Q #get the dictionary with the Q variables for internal super sink connections
+            #we can also flow out via an internal sink connection
+            self.internal_flows = {(s,o,e,d) :
+                m.addConstr(quicksum(F[s,ss,o,e,d] + Q[s,ss,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,e,d] ==
+                            quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s)) + FF[s,o,EdgeType.clash_type(e),d])
+                for s in I for o in O for e in E for d in D}
+                
+            self.external_flows = {(s,o,d) :
+                m.addConstr((1 if s == o else 0) + quicksum(F[ss,s,o,e,d] for ss in self._board.adjacents(s) for e in E) ==
+                        quicksum(F[s,ss,o,e,d] + Q[s,ss,o,e,d] for ss in self._board.adjacents(s) for e in E) 
+                        + G[s,o,d])
+                for s in O for o in O for d in D}
+                
+            #we can only flow out along an edge with a connection
+            self.internal_sink_connections_1 = {(s,ss,o,e,d) :
+                m.addConstr(Q[s,ss,o,e,d] <= V[s,ss,e,d])
+                for s in S for ss in self._board.adjacents(s) for o in O for e in E for d in D}
+            
+            #there mustn't be any other piece on the opposite side of this connection though
+            self.internal_sink_connections_2 = {(s,ss,o,e,d) :
+                m.addConstr(Q[s,ss,o,e,d] <= 1 - quicksum(X[t,ss,c] for t in T for c in prefixes(d)))
+                for s in S for ss in self._board.adjacents(s) for o in O for e in E for d in D}
+            
+
                
         #flow variables can only be set if the connection exists on that edge
         self.flow_existence = {(s,ss,o,e,d):
@@ -525,14 +603,13 @@ class RailroadInkSolver:
         #this is a redundant constraint, but might help simplify things a bit
         #basically saying don't look around to flow into 2 places, it's impossible
         self.one_outflow = {(o,d):
-            m.addConstr(quicksum(G[s,o,d] for s in O) == 1)
+            m.addConstr(quicksum(G[s,o,d] for s in O) <= 1)
             for o in O for d in D}
             
         #add a bonus point if there is only one connection to the super sink (all exits connected)
         self.bonus_point = {d :
             m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum(G[s,o,d] for s in O for o in O if s != o))
             for d in D}
-            
             
         #if it is turn 1, reduce symmetry by forcing the top left to have more pieces
         if self._turn == 1:
@@ -624,7 +701,7 @@ class RailroadInkSolver:
     """
     constraints for the scoring of the board
     """
-    def _scoring_constraints(self, connecting_exits, longest_paths, errors):
+    def _scoring_constraints(self):
         #unpack some variables to make the constraint cleaner
         m = self.m
         I = self.I
@@ -635,22 +712,20 @@ class RailroadInkSolver:
         X = self.X
         Y = self.Y
         Alpha = self.Alpha
-        if connecting_exits:
+        if self._connecting_exits:
             G = self.G
             J = self.J
-        if longest_paths:
+        if self._longest_paths:
             M = self.M
-        
-        #self.scoring = {d : m.addConstr(Alpha[d] == 3) for d in D}
         
         #calculate the score for each full scenario, use a <= because the optimisation will force equality where important
         self.scoring = {d :
             m.addConstr(Alpha[d] <= quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
-                                  + (4 * quicksum(G[s,o,d] for s in O for o in O if s != o) + J[d] if connecting_exits else 0) #connecting exits points
-                                  + (quicksum(M[s,e,d] for s in I for e in E) if longest_paths else 0) #longest path points
+                                  + (4 * quicksum(G[s,o,d] for s in O for o in O if s != o) + J[d] if self._connecting_exits else 0) #connecting exits points
+                                  + (quicksum(M[s,e,d] for s in I for e in E) if self._longest_paths else 0) #longest path points
                                   - (quicksum(X[t,s,c] * t.loose_ends(s) for t in T for s in I for c in prefixes(d)) #subtraction for the number of loose ends (start of penalty calculation)
                                   - quicksum(Y[s,ss,e,dd] for (s,ss,e,dd) in Y if dd == d and s in I and ss in I) #these points are not lost if there is a join on that edge
-                                          if errors else 0)
+                                          if self._errors else 0)
             )
             for d in D}
 
@@ -662,14 +737,21 @@ class RailroadInkSolver:
         m = self.m
         D = self.D
         I = self.I
+        O = self.O
+        S = self.S
+        E = self.E
         Alpha = self.Alpha
         
         if self._objective == "expected-score":
             #m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
             #score regularly but give some extra points for any open ends according to the scoring array
-            m.setObjective(quicksum((Alpha[d] + 
-                                     (quicksum(self.Z[s,ss,d] for s in I for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._turn-1] 
-                                             if self._open_ends else 0)) 
+            m.setObjective(quicksum((Alpha[d] 
+                                    + (quicksum(self.Z[s,ss,d] for s in I for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._end_turn_index] 
+                                             if self._open_ends else 0)
+                                    + (quicksum(self.Q[s,ss,o,e,d] for s in S for ss in self._board.adjacents(s) for o in O for e in E for d in D) * self._internal_sink_scores[self._end_turn_index]
+                                            if self._internal_sinks else 0)
+                                    - (quicksum(self.W[s,ss,e,d] for s in S for ss in self._board.adjacents(s) for e in E for d in D) * self._fake_connections_cost[self._end_turn_index]
+                                             if self._fake_connections else 0)) 
                                     * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
             
         
@@ -752,20 +834,21 @@ class RailroadInkSolver:
     """
     creates a csv in the correct folder with all information about the scoring
     """       
-    def _make_csv(self, folder, connecting_exits, longest_paths, errors):
+    def _make_csv(self, folder):
         #unpack some variables
         I = self.I
         O = self.O
         S = self.S
         T = self.T
         D = self.D
+        E = self.E
         X = self.X
         Y = self.Y
         C = self.C
-        if connecting_exits:
+        if self._connecting_exits:
             G = self.G
             J = self.J
-        if longest_paths:
+        if self._longest_paths:
             M = self.M
         
         Alpha = self.Alpha
@@ -777,25 +860,34 @@ class RailroadInkSolver:
             title_row = ["Turn {0}".format(self._turn + i) for i in range(len(self._dice_rolls))]
             title_row += ["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors", "Bonus Point"]
             title_row += ["Open Ends"] if self._open_ends else []
+            title_row += ["Fake Connections"] if self._fake_connections else []
+            title_row += ["Internal Sink Points"] if self._internal_sinks else []
             csv_writer.writerow(title_row)
             for d in D:
                 #do the calculations
                 score = round(Alpha[d].x)
-                centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)))
-                connecting_exits = (round(4 * sum(G[s,o,d].x for s in O for o in O if s != o)) if connecting_exits else 0)
-                longest_railway = (round(sum(M[s,EdgeType.R,d].x for s in I)) if longest_paths else 0)
-                longest_highway = (round(sum(M[s,EdgeType.H,d].x for s in I)) if longest_paths else 0)
-                errors = (round(-1* sum(X[t,s,c].x * t.loose_ends(s) for t in T for s in I for c in prefixes(d))
+                centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d))) 
+                connecting_points = (round(4 * sum(G[s,o,d].x for s in O for o in O if s != o)) if self._connecting_exits else 0)
+                longest_railway = (round(sum(M[s,EdgeType.R,d].x for s in I)) if self._longest_paths else 0)
+                longest_highway = (round(sum(M[s,EdgeType.H,d].x for s in I)) if self._longest_paths else 0)
+                errors_points = (round(-1* sum(X[t,s,c].x * t.loose_ends(s) for t in T for s in I for c in prefixes(d))
                               + sum(Y[s,ss,e,dd].x for (s,ss,e,dd) in Y if dd == d and s in I and ss in I))
-                                if errors else 0)
-                bonus_point = round(J[d].x)
-                score_row = [turn for turn in d] + [score, connecting_exits, longest_railway, 
-                                                            longest_highway, centre_points, errors, bonus_point]
+                                if self._errors else 0)
+                bonus_point = round(J[d].x) if self._connecting_exits else 0
+                score_row = [turn for turn in d] + [score, connecting_points, longest_railway, 
+                                                            longest_highway, centre_points, errors_points, bonus_point]
                 if self._open_ends:
                     Z = self.Z
-                    open_ends = round(sum(Z[s,ss,d].x for s in I for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._turn-1],2)
+                    open_ends = round(sum(Z[s,ss,d].x for s in I for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._end_turn_index],2)
                     score_row += [open_ends]
-                
+                    
+                if self._fake_connections:
+                    connections_score = round(sum(self.W[s,ss,e,d].x for s in S for ss in self._board.adjacents(s) for e in E) * self._fake_connections_cost[self._end_turn_index],2)
+                    score_row += [connections_score]
+                    
+                if self._internal_sinks:
+                    internal_sinks_score = round(sum(self.Q[s,ss,o,e,d].x for s in S for ss in self._board.adjacents(s) for o in O for e in E) * self._internal_sink_scores[self._end_turn_index],1)
+                    score_row += [internal_sinks_score]
                 csv_writer.writerow(score_row)
     
         #also create a csv for the moves that were made
@@ -819,7 +911,7 @@ class RailroadInkSolver:
         if where == GRB.Callback.MIPSOL:
             #get the X and L values in the solution
             XV = {k : v for (k,v) in zip(self.X.keys(), model.cbGetSolution(list(self.X.values())))}
-            if self.longest_paths:
+            if self._longest_paths:
                 LV = {k : v for (k,v) in zip(self.L.keys(), model.cbGetSolution(list(self.L.values())))}
             else:
                 LV = {} #won't be needed at all
@@ -1029,7 +1121,7 @@ class RailroadInkSolver:
                                     if not self._board.all_specials_used() else 0)) #play a special piece
          
         #finally we also want to check for any loops for longest paths
-#        if self.longest_paths:
+#        if self._longest_paths:
 #            self._add_any_loop_lazy_constraints(scenario, LV)
             
         #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
@@ -1055,10 +1147,10 @@ class EmptyPrinter:
     
         
 if __name__ == "__main__":
-    board = rulebook_game()
-    dice_rolls = rulebook_dice_rolls()
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(folder="rulebook", printOutput=True, printD="all")
+#    board = rulebook_game()
+#    dice_rolls = rulebook_dice_rolls()
+#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", fake_connections=True)
+#    s.solve(folder="rulebook", printOutput=True, printD="all")
     
     #board = Board()
 #    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1)],
@@ -1088,3 +1180,36 @@ if __name__ == "__main__":
 #    
 #    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, isolated_pieces="relief")
 #    s.solve(folder="test", printOutput=True, printD="all")  
+    
+    
+    
+    board = Board()
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+    
+    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+                             Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)]]
+
+    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
+    #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
+    s.solve(printOutput=True, printD="all")
