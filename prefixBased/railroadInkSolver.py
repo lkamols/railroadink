@@ -257,7 +257,7 @@ class RailroadInkSolver:
         #x variables exist for every step of every scenario, which turn is defined by the length
         #of the tuple c, e.g if the tuple is () they are default placements, (1), they are first (since started)
         #move placements
-        self.X = {(t,s,c) : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) for t in T for s in S for c in C}
+        self.X = {(t,s,c) : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) for t in T for s in S for c in C}
         #if linear:
         #    self.X = {(t,s,c) : m.addVar(ub=1) for t in T for s in S for c in C}
         #else:
@@ -273,28 +273,28 @@ class RailroadInkSolver:
             for e in E:
                 for d in D:
                     for ss in self._board.adjacents(s, forward = True):
-                        self.Y[s,ss,e,d] = m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1)
+                        self.Y[s,ss,e,d] = m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1)
                         self.Y[ss,s,e,d] = self.Y[s,ss,e,d]
         
         #V is for whether there is a connection on each side  
-        self.V = {(s,ss,e,d) : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) 
+        self.V = {(s,ss,e,d) : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) 
                 for s in S for ss in self._board.adjacents(s) for e in E for d in D}
 
           
         #w variables are for any fake connections made
         if self._fake_connections:
-            self.W = {(s,ss,e,d) : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) 
+            self.W = {(s,ss,e,d) : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) 
                     for s in S for ss in self._board.adjacents(s) for e in E for d in D}
             
         #z variables for how many open ends there are attached to any placed piece
         #only if we are adding points for open ends
         if self._open_ends:
-            self.Z = {(s,ss,d) : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) 
+            self.Z = {(s,ss,d) : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) 
                     for s in I for ss in self._board.adjacents(s, internal=True) for d in D}
             
         #r variables for the isolated placement removal flow problem
         if self._isolated_pieces == "relief":
-            self.R = {(s,ss,c) : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) 
+            self.R = {(s,ss,c) : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) 
                     for s in S for ss in self._board.adjacents(s) for c in C if c != tuple()}
         
         #CONNECTING START POINTS VARIABLES
@@ -309,21 +309,21 @@ class RailroadInkSolver:
             self.FF = {(s,o,e,d) : m.addVar() for s in I for o in O for e in E for d in D} 
             
             #whether the extra point for connecting all of them is earned
-            self.J = {d : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) for d in D}
+            self.J = {d : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) for d in D}
             #flow from a start square to the super sink
-            self.G = {(s,o,d) : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) for s in O for o in O for d in D}   
+            self.G = {(s,o,d) : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) for s in O for o in O for d in D}   
                 
             #Q variables are for the internal super sink connections, so any connection to the super sink can be via an internal edge
             #if that is an open end
             if self._internal_sinks:
-                self.Q = {(s,ss,o,e,d) : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) 
+                self.Q = {(s,ss,o,e,d) : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) 
                         for s in S for ss in self._board.adjacents(s) for o in O for e in E for d in D}
         
         #LONGEST RAILWAY/HIGHWAY VARIABLES
         if self._longest_paths:
             #each of these is defined for every single possible set of dice rolls d in D
             #whether square s is an end square of the path
-            self.K = {(s,e,d) : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) 
+            self.K = {(s,e,d) : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) 
                     for s in I for e in E for d in D}
                 
             #whether there is a longest path connection between squares s and ss
@@ -337,7 +337,7 @@ class RailroadInkSolver:
                             self.L[ss,s,e,d] = self.L[s,ss,e,d]
             
             #whether square s counts towards the "e" longest road
-            self.M = {(s,e,d) : m.addVar(vtype=(GRB.LINEAR if linear else GRB.BINARY), ub=1) 
+            self.M = {(s,e,d) : m.addVar(vtype=(GRB.CONTINUOUS if linear else GRB.BINARY), ub=1) 
                     for s in I for e in E for d in D}
             
             #relief flow problem, flow variables for ensuring that there is some flow to a start
@@ -1201,4 +1201,4 @@ if __name__ == "__main__":
 
     #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
     s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
-    s.solve(printOutput=True, printD="all")
+    s.solve(printOutput=True, printD="all", linear=True)
