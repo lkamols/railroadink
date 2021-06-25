@@ -28,9 +28,8 @@ class Player(ABC):
             else:
                 turnFolder = "{0}/{1}".format(folder, turn)
             
-            #firstly we generate the move
+            #firstly we generate the move, using the subclasses decision making system
             s = self._move_model(board, turn, actual_dice_rolls[turn-1])
-            
             
             s.solve(folder=turnFolder, printOutput=printOutput)
             #now we need to get out the information from this
@@ -226,8 +225,8 @@ if __name__ == "__main__":
     d = DiceRollSimulator(42)
     rolls = d.generate_game_rolls()
     
-    i = InternalSinksPlayer()
-    i.play_game(rolls, folder="internal-sinks-player", printPictures=True, printOutput=True)
+#    i = InternalSinksPlayer()
+#    i.play_game(rolls, folder="internal-sinks-player", printPictures=True, printOutput=True)
     
 #    la = OnePieceLookAheadPlayer()
 #    la.play_game(rolls, folder="one-piece-look-ahead", printPictures=True, printOutput=True)
@@ -238,8 +237,8 @@ if __name__ == "__main__":
 #    o = OpenEndsPlayer()
 #    o.play_game(rolls, folder="test", printPictures=True, printOutput=True)
     
-#    g = GreedyPlayer()
-#    g.play_game(rolls, folder="greedy-delayed-no-connecting-exits", printPictures=True, printOutput=True)
+    g = GreedyPlayer()
+    g.play_game(rolls, folder="greedy-delayed-no-connecting-exits-2", printPictures=True, printOutput=True)
  
 #    competitors = [GreedyPlayer(), GreedyPlayerWithDelayedSpecials()]
 #    arena = Arena(competitors)
