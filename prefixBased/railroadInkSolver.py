@@ -29,6 +29,10 @@ DEFAULT_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'R', 'J', 'G', 'Q', 'K', 'M'}
 #all possible binaries values
 MAXIMAL_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'R', 'F', 'FF', 'J', 'G', 'Q', 'K', 'L', 'M'}
 
+DEFAULT_GUROBI_PARAMS = {'Heuristics': 0.001,
+                         'Cuts': 1,
+                         'GomoryPasses': 0}
+
 """
 returns a list of all the prefixes of the supplied tuple
 """
@@ -64,6 +68,7 @@ class RailroadInkSolver:
     internal_sinks - if True, then adds framework for connecting exits internally to ensure they are not closed off
     internal_sink_scores - determines how many points are scored for internal super sink connections each turn
     binary_set - set of variables to make binary
+    gurobi_params - dictionary of gurobi parameters to set
     """
     def __init__(self, board, turn, dice_rolls, objective, specials=True, 
                  isolated_pieces="lazy",
@@ -71,7 +76,8 @@ class RailroadInkSolver:
                  open_ends=False, open_end_points=DEFAULT_OPEN_ENDS_POINTS,
                  fake_connections=False, fake_connections_cost=DEFAULT_FAKE_CONNECTIONS_POINTS, fake_connections_max=DEFAULT_FAKE_CONNECTIONS_MAX,
                  internal_sinks=False, internal_sink_scores=DEFAULT_INTERNAL_SINK_SCORES,
-                 binary_set=DEFAULT_BINARY_SET):
+                 binary_set=DEFAULT_BINARY_SET,
+                 gurobi_params=DEFAULT_GUROBI_PARAMS):
         self._board = board
         self._turn = turn
         self._dice_rolls = dice_rolls
@@ -89,6 +95,7 @@ class RailroadInkSolver:
         self._internal_sinks = internal_sinks
         self._internal_sink_scores = internal_sink_scores
         self._binary_set = binary_set
+        self._gurobi_params = gurobi_params
         #check for if there is even a special to be played, don't add them to the model if there isn't
         if self._board.all_specials_used():
             self._specials = False
@@ -786,11 +793,8 @@ class RailroadInkSolver:
         if tune == 0:
             if lazy_constraints:
                 self.m.setParam('LazyConstraints', 1)
-            #self.m.setParam('MIPGap', 0)
-            #self.m.setParam('BranchDir', 1)
-            self.m.setParam('Heuristics', 0.001)
-            self.m.setParam('Cuts', 1)
-            self.m.setParam('GomoryPasses', 0)
+            for param in self._gurobi_params:
+                self.m.setParam(param, self._gurobi_params[param])
         else:
             self.m.setParam('TuneTimeLimit', tune)
         if folder != None:
