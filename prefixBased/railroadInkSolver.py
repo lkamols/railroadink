@@ -35,6 +35,8 @@ DEFAULT_GUROBI_PARAMS = {'Heuristics': 0.001,
                          'Cuts': 1,
                          'GomoryPasses': 0}
 
+DEFAULT_PRIORITIES = {"Y": 10}
+
 """
 returns a list of all the prefixes of the supplied tuple
 """
@@ -79,7 +81,8 @@ class RailroadInkSolver:
                  fake_connections=False, fake_connections_cost=DEFAULT_FAKE_CONNECTIONS_POINTS, fake_connections_max=DEFAULT_FAKE_CONNECTIONS_MAX,
                  internal_sinks=False, internal_sink_scores=DEFAULT_INTERNAL_SINK_SCORES,
                  binary_set=DEFAULT_BINARY_SET,
-                 gurobi_params=DEFAULT_GUROBI_PARAMS):
+                 gurobi_params=DEFAULT_GUROBI_PARAMS,
+                 branch_priorities=DEFAULT_PRIORITIES):
         self._board = board
         self._turn = turn
         self._dice_rolls = dice_rolls
@@ -98,6 +101,7 @@ class RailroadInkSolver:
         self._internal_sink_scores = internal_sink_scores
         self._binary_set = binary_set
         self._gurobi_params = gurobi_params
+        self._branch_priorities = branch_priorities
         #check for if there is even a special to be played, don't add them to the model if there isn't
         if self._board.all_specials_used():
             self._specials = False
@@ -151,6 +155,8 @@ class RailroadInkSolver:
         self._create_sets()
         
         self._create_variables(linear)
+        
+        self._set_branch_priorities()
         
         self._legal_constraints()
         if self._connecting_exits:
@@ -379,6 +385,20 @@ class RailroadInkSolver:
         #SCORING VARIABLES
         #the score for every final scenario
         self.Alpha = {d : m.addVar() for d in D}
+            
+            
+    """
+    adjust the branch priorities according to the branch priority dictionary
+    """
+    def _set_branch_priorities(self):
+        #if there is a better way of doing this than writing them all out like this, I don't see it
+        #I could probably add all of these to a dictionary
+        for varname in self._branch_priorities:
+            vardict = getattr(self, varname) #get the value from the class dictionary
+            priority = self._branch_priorities[varname]
+            #then for all variables by this name, set the branch priorities
+            for a in vardict:
+                vardict[a].BranchPriority = priority
 
     """
     add all of the constraints to do with legal placements and setting of Y (connection) variables
