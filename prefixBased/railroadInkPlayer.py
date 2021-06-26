@@ -11,6 +11,7 @@ PHOTO_FILENAME = "solution.png"
 
 SCORE_CSV = "score.csv"
 INFO_CSV = "info.csv"
+MOVES_CSV = "moves.csv"
 ERROR_FILE = "MISMATCH.txt"
 
 """
@@ -27,6 +28,7 @@ class Player(ABC):
         board = Board()
         
         times = [] #track the times of each of the runs
+        all_moves = [] #track all the moves made so that they can be put into a csv at the end
         
         #go through every turn
         for turn in range(1,TURNS+1):
@@ -46,6 +48,7 @@ class Player(ABC):
             #now add all the moves made to the board
             for square, tile in moves:
                 board.add_tile(tile, square, turn)
+                all_moves += [(tile, square, turn)]
             #update the list of solve times
             times.append(s.get_gurobi_runtime())
         
@@ -59,6 +62,7 @@ class Player(ABC):
         score = self._make_score_csv(board, folder)
         
         self._make_info_csv(folder, times)
+        self._make_moves_csv(folder, all_moves)
             
         #do a double check that the result of the MILP and the board calculation are the same
         #these are not necessarily going to be the same depending on the solver, so raising an error
@@ -98,7 +102,17 @@ class Player(ABC):
             for i in range(TURNS):
                 csv_writer.writerow(["Turn " + str(i+1) + " time", times[i]])
             
-            
+    """
+    make a csv containing all the moves made throughout the whole game
+    """
+    def _make_moves_csv(self, folder, all_moves):
+        movesFile = "{0}/{1}/{2}".format(RESULTS_FOLDER, folder, MOVES_CSV)
+        with open(movesFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Piece", "Rotation", "Flip", "Row", "Col", "Turn"])
+            for move in all_moves:
+                csv_writer.writerow([move[0].get_piece(), move[0].get_rotation(), move[0].get_flip(),
+                                     move[1][0], move[1][1], move[2]])
           
     """
     generate the model used for making the move, this will be overridden in a subclass
