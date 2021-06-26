@@ -14,6 +14,7 @@ import time
 RESULTS_FOLDER = "results"
 RESULTS_CSV = "points.csv"
 MOVES_CSV = "moves.csv"
+SETTINGS_CSV = "settings.csv"
 
 #default values for some of the tuneable characteristics
 DEFAULT_OPEN_ENDS_POINTS = [2.5, 2.5, 2, 1.6, 1.4, 0.5, 0]
@@ -127,7 +128,7 @@ class RailroadInkSolver:
             saves to "last-run" if no folder is specified, if None will not do any saving at all
     linear - if True, runs an LP, if False runs the IP
     printOutput - whether to print Gurobi output to stdout
-    printD - a list of scenarios to print, or "all" if all scenarios should be printed, default is to not print
+    printD - a list of scenarios to print pictures for, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
     tune - if non-zero, will perform a tune with the given length of time instead of a normal search
     lazy_constraints - whether or not to include lazy constraints
@@ -181,13 +182,10 @@ class RailroadInkSolver:
             #all logging is over, point the logfile somewhere else
             #this removes Gurobi's reference to the needed file so that it can be deleted
             self.m.setParam('LogFile', RESULTS_FOLDER + '/junk.txt') 
+         
             
         if tune == 0 and folder != None:
-            #do any necessary printing of pictures
-            self._print_scenarios(printD, folder)
-            
-            #make the csv
-            self._make_csv(folder)
+            self._create_output(folder, printD)
             
         self._end_time = time.time()
         #don't have any return values, instead we can get the results from the class
@@ -804,7 +802,21 @@ class RailroadInkSolver:
         
 
 
-    #############################PRINTING######################################
+    #############################OUTPUT######################################
+    
+    
+    """
+    creates all output files
+    """
+    def _create_output(self, folder, printD):
+        #create images for any scenarios
+        self._print_scenarios(printD, folder)
+        #create the csv for points
+        self._make_points_csv(folder)
+        #create the csv for the settings
+        self._make_settings_csv(folder)
+        
+        
     
     """
     determine where to print stdout to depending on whether or not we want to see it
@@ -850,7 +862,7 @@ class RailroadInkSolver:
     """
     creates a csv in the correct folder with all information about the scoring
     """       
-    def _make_csv(self, folder):
+    def _make_points_csv(self, folder):
         #unpack some variables
         I = self.I
         O = self.O
@@ -860,7 +872,7 @@ class RailroadInkSolver:
         E = self.E
         X = self.X
         Y = self.Y
-        C = self.C
+        
         if self._connecting_exits:
             G = self.G
             J = self.J
@@ -905,8 +917,16 @@ class RailroadInkSolver:
                     internal_sinks_score = round(sum(self.Q[s,ss,o,e,d].x for s in S for ss in self._board.adjacents(s) for o in O for e in E) * self._internal_sink_scores[self._end_turn_index],1)
                     score_row += [internal_sinks_score]
                 csv_writer.writerow(score_row)
-    
-        #also create a csv for the moves that were made
+                
+    """
+    make a csv containing the moves made in all scenarios
+    """
+    def _make_scenarios_csv(self, folder):
+        S = self.S
+        T = self.T
+        X = self.X
+        C = self.C
+        
         movesFile = folder + "/" + MOVES_CSV
         with open(movesFile, mode="w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=",")
@@ -915,8 +935,34 @@ class RailroadInkSolver:
                 for s in S:
                     for t in T:
                         if X[t,s,c].x > 0.9:
-                            csv_writer.writerow([t.get_piece(), t.get_rotation(), t.get_flip(), s[0], s[1]])
-        
+                            csv_writer.writerow([t.get_piece(), t.get_rotation(), t.get_flip(), s[0], s[1]])        
+                            
+                            
+    """
+    make a file containing all the settings used for this run
+    """
+    def _make_settings_csv(self, folder):
+        settingsFile = folder + "/" + SETTINGS_CSV
+        with open(settingsFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["turn", self._turn])
+            csv_writer.writerow(["objective", self._objective])
+            csv_writer.writerow(["isolated_pieces", self._isolated_pieces])
+            csv_writer.writerow(["specials", self._specials])
+            csv_writer.writerow(["connecting_exits", self._connecting_exits])
+            csv_writer.writerow(["longest_paths", self._longest_paths])
+            csv_writer.writerow(["errors", self._errors])
+            csv_writer.writerow(["open_ends", self._open_ends])
+            csv_writer.writerow(["fake_connections", self._fake_connections])
+            csv_writer.writerow(["internal_sinks", self._internal_sinks])
+            csv_writer.writerow(["open_end_points"] + self._open_end_points)
+            csv_writer.writerow(["fake_connections_cost"] + self._fake_connections_cost)
+            csv_writer.writerow(["fake_connections_max"] + self._fake_connections_max)
+            csv_writer.writerow(["internal_sink_scores"] + self._internal_sink_scores)
+            csv_writer.writerow(["binary_set"] + list(self._binary_set))
+            csv_writer.writerow(["Gurobi Params"])
+            for param in self._gurobi_params:
+                csv_writer.writerow([param, self._gurobi_params[param]])
         
     #############################CALLBACK FUNCTIONS############################
         
