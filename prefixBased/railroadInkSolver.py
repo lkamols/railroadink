@@ -15,6 +15,7 @@ RESULTS_FOLDER = "results"
 RESULTS_CSV = "points.csv"
 MOVES_CSV = "moves.csv"
 SETTINGS_CSV = "settings.csv"
+INFO_CSV = "info.csv"
 
 #default values for some of the tuneable characteristics
 DEFAULT_OPEN_ENDS_POINTS = [2.5, 2.5, 2, 1.6, 1.4, 0.5, 0]
@@ -183,11 +184,12 @@ class RailroadInkSolver:
             #this removes Gurobi's reference to the needed file so that it can be deleted
             self.m.setParam('LogFile', RESULTS_FOLDER + '/junk.txt') 
          
+        self._end_time = time.time()
             
         if tune == 0 and folder != None:
             self._create_output(folder, printD)
             
-        self._end_time = time.time()
+        
         #don't have any return values, instead we can get the results from the class
         
     """
@@ -813,9 +815,12 @@ class RailroadInkSolver:
         self._print_scenarios(printD, folder)
         #create the csv for points
         self._make_points_csv(folder)
+        #create the csv for the moves being made
+        self._make_scenarios_csv(folder)
         #create the csv for the settings
         self._make_settings_csv(folder)
-        
+        #create the csv with information about the run
+        self._make_info_csv(folder)
         
     
     """
@@ -963,6 +968,18 @@ class RailroadInkSolver:
             csv_writer.writerow(["Gurobi Params"])
             for param in self._gurobi_params:
                 csv_writer.writerow([param, self._gurobi_params[param]])
+                
+    """
+    make a csv containing all the information about this run, such as the time taken, lazy constraints
+    added, etc
+    """
+    def _make_info_csv(self, folder):
+        infoFile = folder + "/" + INFO_CSV
+        with open(infoFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["gurobi time", self.get_gurobi_runtime()])
+            csv_writer.writerow(["total time", self.get_total_runtime()])
+            csv_writer.writerow(["result", self.get_result()])
         
     #############################CALLBACK FUNCTIONS############################
         
