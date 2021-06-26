@@ -1145,9 +1145,6 @@ class Cluster:
             #if the edge is blank, create a dummy edge that leads to nowhere to end all the paths from the other side
             end_edges.add((None, 0))
         return end_edges
-                    
-                    
-        
         
     #GETTER METHODS
     

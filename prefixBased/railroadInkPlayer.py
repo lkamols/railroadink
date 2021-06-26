@@ -3,10 +3,15 @@ from abc import ABC, abstractmethod
 from railroadInkSolver import RailroadInkSolver, RESULTS_FOLDER
 from board import Board, DiceRoll, BASIC_PIECES, JUNCTION_PIECES
 import random
+import csv
 
 TURNS = 7
 ARENA_FOLDER = "arena"
 PHOTO_FILENAME = "solution.png"
+
+SCORE_CSV = "score.csv"
+INFO_CSV = "info.csv"
+ERROR_FILE = "MISMATCH.txt"
 
 """
 abstract class for a player of the game, has the ability to run a full game
@@ -20,6 +25,9 @@ class Player(ABC):
     def play_game(self, actual_dice_rolls, folder=None, printPictures=False, printOutput=False):
         #start by creating an empty board
         board = Board()
+        
+        times = [] #track the times of each of the runs
+        
         #go through every turn
         for turn in range(1,TURNS+1):
             #work out where to save the run information to
@@ -38,15 +46,59 @@ class Player(ABC):
             #now add all the moves made to the board
             for square, tile in moves:
                 board.add_tile(tile, square, turn)
+            #update the list of solve times
+            times.append(s.get_gurobi_runtime())
         
         if printPictures:
             if folder == None:
                 board.fancy_board_print()
             else:
-                board.fancy_board_print(file="{0}/{1}/{2}".format(RESULTS_FOLDER,folder, PHOTO_FILENAME))
+                board.fancy_board_print(file="{0}/{1}/{2}".format(RESULTS_FOLDER, folder, PHOTO_FILENAME))
+                
+        #now make a CSV containing the scoring information about the run and get the calculated score
+        score = self._make_score_csv(board, folder)
+        
+        self._make_info_csv(folder, times)
+            
+        #do a double check that the result of the MILP and the board calculation are the same
+        #these are not necessarily going to be the same depending on the solver, so raising an error
+        #isn't really appropriate, and if there are batch results then any printing won't do much
+        #so create a file 
+        if score != s.get_result():
+            errorPath = "{0}/{1}/{2}".format(RESULTS_FOLDER, folder, ERROR_FILE)
+            with open(errorPath, 'w') as errorFile:
+                errorFile.write("MILP: {0}\nBoard: {1}".format(s.get_result(), score))
             
         #return the final score
         return s.get_result()
+    
+    """
+    make a csv containing the score information of the game, note that this calculation does not use the MILP result
+    but rather uses the board to calculate the score.
+    Returns the final score to be confirmed that it matches the returned result
+    """
+    def _make_score_csv(self, board, folder):
+        #do the score calculation using the board function 'score' which determines the score and its composition
+        score, joining_exits_points, longest_railway, longest_highway, centre_points, errors = board.score()
+        scoreFile = "{0}/{1}/{2}".format(RESULTS_FOLDER, folder, SCORE_CSV)
+        with open(scoreFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors"])
+            csv_writer.writerow([score, joining_exits_points, longest_railway, longest_highway, centre_points, errors])
+        return score
+    
+    """
+    make a csv containing information about the run, including the time taken overall and for each step
+    """
+    def _make_info_csv(self, folder, times):
+        infoFile = "{0}/{1}/{2}".format(RESULTS_FOLDER, folder, INFO_CSV)
+        with open(infoFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Total time", round(sum(times),2)])
+            for i in range(TURNS):
+                csv_writer.writerow(["Turn " + str(i+1) + " time", times[i]])
+            
+            
           
     """
     generate the model used for making the move, this will be overridden in a subclass
@@ -238,7 +290,7 @@ if __name__ == "__main__":
 #    o.play_game(rolls, folder="test", printPictures=True, printOutput=True)
     
     g = GreedyPlayer()
-    g.play_game(rolls, folder="greedy-delayed-no-connecting-exits-2", printPictures=True, printOutput=True)
+    g.play_game(rolls, folder="greedy-delayed-no-connecting-exits", printPictures=True, printOutput=True)
  
 #    competitors = [GreedyPlayer(), GreedyPlayerWithDelayedSpecials()]
 #    arena = Arena(competitors)
