@@ -7,7 +7,6 @@ import csv
 import json
 
 TURNS = 7
-ARENA_FOLDER = "arena"
 PHOTO_FILENAME = "solution.png"
 
 SCORE_CSV = "score.csv"
@@ -15,18 +14,44 @@ INFO_CSV = "info.csv"
 MOVES_CSV = "moves.csv"
 ERROR_FILE = "MISMATCH.txt"
 
-BASE_CONFIG_NAME = "BASE"
+BASE_CONFIG_NAME = "INITIAL"
+
+PLAYER_FOLDER = "players"
 
 """
-abstract class for a player of the game, has the ability to run a full game
-simulation, using a sub class implementation for choosing moves
+class for a player of the game, has the ability to run a full game
+simulation, given some configuration file
 """
-class Player(ABC):
+class RailroadInkPlayer:
     
-    def __init__(self):
-        pass
-    
-    def play_game(self, actual_dice_rolls, folder=None, printPictures=False, printOutput=False):
+    """
+    Constructor.
+    Creates the given player from the player file by that name which defines how the player will play
+    Creates a game with the given game_seed
+    """
+    def __init__(self, player, game_seed):
+        #work out the folder that will be saved to 
+        #(the call to RailroadInkSolver prepends the root folder, so have one version without the root)
+        self._call_folder = "{0}/Seed-{1}".format(player, game_seed)
+        self._folder = "{0}/{1}".format(RESULTS_FOLDER, self._call_folder)
+        
+        #read in the config file which is stored as a json
+        player_file_location = "{0}/{1}.txt".format(PLAYER_FOLDER, player)
+        with open(player_file_location) as jsonFile:
+            self._config = json.load(jsonFile)
+        #convert the base arguments into a dictionary, this dictionary can be updated on any turn
+        #if this is empty, leave kwargs empty (although this will throw an error on the call)
+        self._kwargs = {}
+        for kw in self._config.get(BASE_CONFIG_NAME, {}):
+            self._kwargs[kw] = self._config[BASE_CONFIG_NAME][kw] 
+            
+        #initialise the game dice rolls using the seed
+        self._rolls = self.generate_game_rolls(game_seed)
+       
+    """
+    play a full game of Railroad Ink with the given player and dice rolls (from the seed)
+    """
+    def play_game(self, printPictures=False, printOutput=False):
         #start by creating an empty board
         board = Board()
         
@@ -36,13 +61,12 @@ class Player(ABC):
         #go through every turn
         for turn in range(1,TURNS+1):
             #work out where to save the run information to
-            if folder == None:
-                turnFolder = None
-            else:
-                turnFolder = "{0}/{1}".format(folder, turn)
+            turnFolder = "{0}/Turn-{1}".format(self._call_folder, turn)
             
-            #firstly we generate the move, using the subclasses decision making system
-            s = self._move_model(board, turn, actual_dice_rolls[turn-1])
+            self._update_kwargs_dict(turn)
+            dice_rolls = self._get_dice_rolls(turn)
+            
+            s = RailroadInkSolver(board, turn, dice_rolls, **self._kwargs)
             
             s.solve(folder=turnFolder, printOutput=printOutput)
             #now we need to get out the information from this
@@ -56,23 +80,20 @@ class Player(ABC):
             times.append(s.get_gurobi_runtime())
         
         if printPictures:
-            if folder == None:
-                board.fancy_board_print()
-            else:
-                board.fancy_board_print(file="{0}/{1}/{2}".format(RESULTS_FOLDER, folder, PHOTO_FILENAME))
+            board.fancy_board_print(file="{0}/{1}".format(self._folder, PHOTO_FILENAME))
                 
         #now make a CSV containing the scoring information about the run and get the calculated score
-        score = self._make_score_csv(board, folder)
+        score = self._make_score_csv(board)
         
-        self._make_info_csv(folder, times)
-        self._make_moves_csv(folder, all_moves)
+        self._make_info_csv(times)
+        self._make_moves_csv(all_moves)
             
         #do a double check that the result of the MILP and the board calculation are the same
         #these are not necessarily going to be the same depending on the solver, so raising an error
         #isn't really appropriate, and if there are batch results then any printing won't do much
         #so create a file 
         if score != s.get_result():
-            errorPath = "{0}/{1}/{2}".format(RESULTS_FOLDER, folder, ERROR_FILE)
+            errorPath = "{0}/{1}".format(self._folder, ERROR_FILE)
             with open(errorPath, 'w') as errorFile:
                 errorFile.write("MILP: {0}\nBoard: {1}".format(s.get_result(), score))
             
@@ -80,184 +101,28 @@ class Player(ABC):
         return s.get_result()
     
     """
-    make a csv containing the score information of the game, note that this calculation does not use the MILP result
-    but rather uses the board to calculate the score.
-    Returns the final score to be confirmed that it matches the returned result
+    determines the dice rolls which will be used to call the solver
+    TO DO expand this to work with future moves as well, not just the current move
     """
-    def _make_score_csv(self, board, folder):
-        #do the score calculation using the board function 'score' which determines the score and its composition
-        score, joining_exits_points, longest_railway, longest_highway, centre_points, errors = board.score()
-        scoreFile = "{0}/{1}/{2}".format(RESULTS_FOLDER, folder, SCORE_CSV)
-        with open(scoreFile, mode="w", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file, delimiter=",")
-            csv_writer.writerow(["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors"])
-            csv_writer.writerow([score, joining_exits_points, longest_railway, longest_highway, centre_points, errors])
-        return score
+    def _get_dice_rolls(self, turn):
+        this_turn = self._rolls[turn-1]
+        return [[DiceRoll(this_turn, 1)]]
     
     """
-    make a csv containing information about the run, including the time taken overall and for each step
+    updates the currently stored kwargs with the changes on the given turn
     """
-    def _make_info_csv(self, folder, times):
-        infoFile = "{0}/{1}/{2}".format(RESULTS_FOLDER, folder, INFO_CSV)
-        with open(infoFile, mode="w", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file, delimiter=",")
-            csv_writer.writerow(["Total time", round(sum(times),2)])
-            for i in range(TURNS):
-                csv_writer.writerow(["Turn " + str(i+1) + " time", times[i]])
-            
-    """
-    make a csv containing all the moves made throughout the whole game
-    """
-    def _make_moves_csv(self, folder, all_moves):
-        movesFile = "{0}/{1}/{2}".format(RESULTS_FOLDER, folder, MOVES_CSV)
-        with open(movesFile, mode="w", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file, delimiter=",")
-            csv_writer.writerow(["Piece", "Rotation", "Flip", "Row", "Col", "Turn"])
-            for move in all_moves:
-                csv_writer.writerow([move[0].get_piece(), move[0].get_rotation(), move[0].get_flip(),
-                                     move[1][0], move[1][1], move[2]])
-          
-    """
-    generate the model used for making the move, this will be overridden in a subclass
-    to allow for different move makers
-    """
-    @abstractmethod
-    def _move_model(self, board, turn, dice):
-        pass
-    
-    """
-    the name to use for each player
-    """
-    @abstractmethod
-    def player_name(self):
-        pass
-        
- 
-"""
-the simplest player, gets as many points as possible on every turn, delaying all special moves
-until the last 3 turns
-"""       
-class GreedyPlayer(Player):
-    
-    def __init__(self):
-        pass
-    
-    #overriding abstract method
-    def _move_model(self, board, turn, dice):
-        #only use the special piece if turn > 4 (i.e on the last 3 turns)
-        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score", connecting_exits=False, specials=(turn>4))
-        #return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score", specials=(turn>4))
-
-    
-    #overriding abstract method
-    def player_name(self):
-        return "Greedy"
-    
-    
-class OpenEndsPlayer(Player):
-    
-    def __init__(self):
-        pass
-    
-    #overriding abstract method
-    def _move_model(self, board, turn, dice):
-        #only use the special piece if turn > 4 (i.e on the last 3 turns)
-        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score", isolated_pieces="relief", open_ends=True, specials=(turn>4))
-
-    
-    #overriding abstract method
-    def player_name(self):
-        return "Open Ends"
-    
-    
-class OnePieceLookAheadPlayer(Player):
-    
-    def __init__(self):
-        pass
-    
-    def _move_model(self, board, turn, dice):
-        #unless it is the last move, make the move with a look ahead with one extra piece of each
-        if turn == 7:
-            diceRoll = [[DiceRoll(dice, 1)]]
-        else:
-            diceRoll = [[DiceRoll(dice, 1)],[DiceRoll({piece: 1},1/9) for piece in BASIC_PIECES + JUNCTION_PIECES]]
-        #only use the special piece if turn > 4 (i.e on the last 3 turns)
-        return RailroadInkSolver(board, turn, diceRoll, "expected-score", isolated_pieces="relief",specials=(turn>4))
-    
-    def player_name(self):
-        return "One Piece Look Ahead"
-    
-    
-class FakeConnectionsPlayer(Player):
-    
-    def __init__(self):
-        pass
-    
-    def _move_model(self, board, turn, dice):
-        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score", fake_connections=True, specials=(turn>4))
-    
-    def player_name(self):
-        return "Fake connections player"
-    
-class InternalSinksPlayer(Player):
-
-    def __init__(self):
-        pass
-    
-    def _move_model(self, board, turn, dice):
-        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], "expected-score", internal_sinks=True, longest_paths=False, specials=(turn>4))
-
-    def player_name(self):
-        return "Internal Sinks Player"
-    
-"""
-player based on a config file
-"""
-class ConfigFilePlayer(Player):
-    
-    def __init__(self, file):
-        #read in the config file which is stored as a json
-        with open(file) as jsonFile:
-            self._config = json.load(jsonFile)
-        #convert the base arguments into a dictionary, this dictionary can be updated on any turn
-        #if this is empty, leave kwargs empty (although this will throw an error on the call)
-        self._kwargs = {}
-        for kw in self._config.get(BASE_CONFIG_NAME, {}):
-            self._kwargs[kw] = self._config[BASE_CONFIG_NAME][kw]  
-        
-    def _move_model(self, board, turn, dice):
-        #update any dictionary entries that are to be overridden (if there are any at all)
+    def _update_kwargs_dict(self, turn):
         turnName = 'TURN {0}'.format(turn)
+        #update any dictionary entries that are to be overridden (if there are any at all)
         #if there is no entry, just iterate through an empty dictionary (i.e do nothing)
         for kw in self._config.get(turnName, {}):
-            self._kwargs[kw] = self._config[turnName][kw]
-        #then make the call to the solver with the given kwargs
-        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], **self._kwargs)
-        
-    def player_name(self):
-        return "Config File Player"
-
-"""
-class for simulating dice rolls and generating games
-"""
-class DiceRollSimulator:
-
-    def __init__(self, seed=0):
-        random.seed(seed)
-        
-    """
-    generates a list of many different games, each of which is a list of dice rolls
-    """
-    def generate_game_list(self, trials):
-        l = []
-        for i in range(trials):
-            l.append(self.generate_game_rolls())
-        return l
+            self._kwargs[kw] = self._config[turnName][kw]        
     
     """
     generates the rolls for a single game of Railroad Ink
     """
-    def generate_game_rolls(self):
+    def generate_game_rolls(self, game_seed):
+        random.seed(game_seed)
         rolls = []
         for turn in range(TURNS):
             counts = {} #the counts of each dice rolled
@@ -275,51 +140,79 @@ class DiceRollSimulator:
             #add this count to the rolls
             rolls.append(counts)
         return rolls
-   
     
-class Arena:
+    """
+    make a csv containing the score information of the game, note that this calculation does not use the MILP result
+    but rather uses the board to calculate the score.
+    Returns the final score to be confirmed that it matches the returned result
+    """
+    def _make_score_csv(self, board):
+        #do the score calculation using the board function 'score' which determines the score and its composition
+        score, joining_exits_points, longest_railway, longest_highway, centre_points, errors = board.score()
+        scoreFile = "{0}/{1}".format(self._folder, SCORE_CSV)
+        with open(scoreFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors"])
+            csv_writer.writerow([score, joining_exits_points, longest_railway, longest_highway, centre_points, errors])
+        return score
     
-    def __init__(self, competitors, folder="arena"):
-        self._competitors = competitors
-        self._folder = folder
-        
-    def test(self, trials):
-        #start by generating the games to get them to play
-        d = DiceRollSimulator()
-        games = d.generate_game_list(trials)
-    
-        #initialise the array that tracks wins for each competitor
-        wins = [0] * len(self._competitors) 
-        
-        #then for each of the games, pit the different models against each other
-        for gameIndex in range(len(games)):
-            game = games[gameIndex]
-            #generate the scores for all the competitors
-            scores = []
-            for competitor in self._competitors:
-                scores.append(competitor.play_game(game, folder="{0}/{1}/game {2}".format(
-                        ARENA_FOLDER, competitor.player_name(), gameIndex), printOutput=True, printPictures=True))
-                
-            #then find the winning score
-            win_score = max(scores)
+    """
+    make a csv containing information about the run, including the time taken overall and for each step
+    """
+    def _make_info_csv(self, times):
+        infoFile = "{0}/{1}".format(self._folder, INFO_CSV)
+        with open(infoFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Total time", round(sum(times),2)])
+            for i in range(TURNS):
+                csv_writer.writerow(["Turn " + str(i+1) + " time", times[i]])
             
-            #find any players who got that score
-            winners = []
-            for i in range(len(scores)):
-                if scores[i] == win_score:
-                    #we have a winner!
-                    winners.append(i)
-            
-            #now add to the wins of all the winners, less points the more winners there were
-            for winner in winners:
-                wins[winner] += 1 / len(winners)
-        return wins
+    """
+    make a csv containing all the moves made throughout the whole game
+    """
+    def _make_moves_csv(self, all_moves):
+        movesFile = "{0}/{1}".format(self._folder, MOVES_CSV)
+        with open(movesFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Piece", "Rotation", "Flip", "Row", "Col", "Turn"])
+            for move in all_moves:
+                csv_writer.writerow([move[0].get_piece(), move[0].get_rotation(), move[0].get_flip(),
+                                     move[1][0], move[1][1], move[2]])
+          
+    """
+    generate the model used for making the move, this will be overridden in a subclass
+    to allow for different move makers
+    """
+    @abstractmethod
+    def _move_model(self, board, turn, dice):
+        pass
     
+
+#class OnePieceLookAheadPlayer(Player):
+#    
+#    def __init__(self):
+#        pass
+#    
+#    def _move_model(self, board, turn, dice):
+#        #unless it is the last move, make the move with a look ahead with one extra piece of each
+#        if turn == 7:
+#            diceRoll = [[DiceRoll(dice, 1)]]
+#        else:
+#            diceRoll = [[DiceRoll(dice, 1)],[DiceRoll({piece: 1},1/9) for piece in BASIC_PIECES + JUNCTION_PIECES]]
+#        #only use the special piece if turn > 4 (i.e on the last 3 turns)
+#        return RailroadInkSolver(board, turn, diceRoll, "expected-score", isolated_pieces="relief",specials=(turn>4))
+#    
+#    def player_name(self):
+#        return "One Piece Look Ahead"
+        
     
 if __name__ == "__main__":
     
-    d = DiceRollSimulator(42)
-    rolls = d.generate_game_rolls()
+#    d = DiceRollSimulator(42)
+#    rolls = d.generate_game_rolls()
+    
+    p = RailroadInkPlayer("greedy-delayed-specials", 42)
+    p.play_game(printPictures=True, printOutput=True)
     
 #    i = InternalSinksPlayer()
 #    i.play_game(rolls, folder="internal-sinks-player", printPictures=True, printOutput=True)
@@ -336,8 +229,8 @@ if __name__ == "__main__":
 #    g = GreedyPlayer()
 #    g.play_game(rolls, folder="greedy-delayed-no-connecting-exits", printPictures=True, printOutput=True)
     
-    c = ConfigFilePlayer("settings.txt")
-    c.play_game(rolls, folder="config-player", printPictures=True, printOutput=True)
+#    c = ConfigFilePlayer("settings.txt")
+#    c.play_game(rolls, folder="config-player", printPictures=True, printOutput=True)
  
 #    competitors = [GreedyPlayer(), GreedyPlayerWithDelayedSpecials()]
 #    arena = Arena(competitors)

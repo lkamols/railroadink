@@ -877,7 +877,7 @@ class Board:
             joining_exits_points += 1
             
         score = centre_points + joining_exits_points + longest_railway + longest_highway - errors
-        return score, joining_exits_points, longest_railway, longest_highway, centre_points, errors
+        return score, joining_exits_points, longest_railway, longest_highway, centre_points, -1*errors
     
 """
 A cluster of adjoining pieces in the form of a disjoint set, 
