@@ -143,11 +143,10 @@ class RailroadInkSolver:
 
         self._start_time = time.time()
         
-        if folder != None:
-            folder = RESULTS_FOLDER + "/" + folder #update the folder name, always in the RESULTS top folder
+        folder = RESULTS_FOLDER + "/" + folder #update the folder name, always in the RESULTS top folder
             
-            #create an empty folder to store all the results in
-            self._create_empty_folder(folder)
+        #create an empty folder to store all the results in
+        create_empty_folder(folder)
         
         #create the model
         self.m = Model("Railroad Ink")
@@ -192,7 +191,7 @@ class RailroadInkSolver:
          
         self._end_time = time.time()
             
-        if tune == 0 and folder != None:
+        if tune == 0:
             self._create_output(folder, printD)
             
         
@@ -233,20 +232,6 @@ class RailroadInkSolver:
     """
     def get_total_runtime(self):
         return round(self._end_time - self._start_time, 2)
-        
-    """
-    ensures that there is an empty folder located at 'folder', deleting any existing folder if there is one
-    """        
-    def _create_empty_folder(self, folder):
-
-        #if the folder we are logging to exists, delete it
-        try:
-            shutil.rmtree(folder)
-        except FileNotFoundError:
-            pass #if the folder wasn't there, we don't mind
-        
-        #then create an empty directory there, using makedirs to make any required folders along the way
-        os.makedirs(folder)    
 
     """
     create all the sets used for the Railroad Ink problem
@@ -792,8 +777,6 @@ class RailroadInkSolver:
                                     - (quicksum(self.W[s,ss,e,d] for s in S for ss in self._board.adjacents(s) for e in E for d in D) * self._fake_connections_cost[self._end_turn_index]
                                              if self._fake_connections else 0)) 
                                     * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
-            
-        
        
     """
     get the probability of a specific scenario, d
@@ -817,15 +800,9 @@ class RailroadInkSolver:
                 self.m.setParam(param, self._gurobi_params[param])
         else:
             self.m.setParam('TuneTimeLimit', tune)
-        if folder != None:
-            self.m.setParam('LogFile', folder + "/log.txt")
-        
-        
-        
-
+        self.m.setParam('LogFile', folder + "/log.txt")
 
     #############################OUTPUT######################################
-    
     
     """
     creates all output files
@@ -1246,6 +1223,21 @@ class EmptyPrinter:
     
     def flush(*args):
         pass
+    
+    
+"""
+ensures that there is an empty folder located at 'folder', deleting any existing folder if there is one
+"""       
+def create_empty_folder(folder):
+
+    #if the folder we are logging to exists, delete it
+    try:
+        shutil.rmtree(folder)
+    except FileNotFoundError:
+        pass #if the folder wasn't there, we don't mind
+    
+    #then create an empty directory there, using makedirs to make any required folders along the way
+    os.makedirs(folder)  
     
         
 if __name__ == "__main__":

@@ -58,8 +58,6 @@ class TestingSuite:
                 passes += (1 if success else 0)
                 csv_writer.writerow([name, "PASSED" if success else "FAILED"] + gurobi_times + absolute_times)
             print("{0}/{1} TESTS PASSED".format(passes, len(self._tests)))
-        
-        
     
     """
     run a single test, returns whether it was a success, the average, min and max execution time of trials

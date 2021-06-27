@@ -1,6 +1,4 @@
-
-from abc import ABC, abstractmethod
-from railroadInkSolver import RailroadInkSolver, RESULTS_FOLDER
+from railroadInkSolver import RailroadInkSolver, RESULTS_FOLDER, create_empty_folder
 from board import Board, DiceRoll, BASIC_PIECES, JUNCTION_PIECES
 import random
 import csv
@@ -55,6 +53,9 @@ class RailroadInkPlayer:
         #start by creating an empty board
         board = Board()
         
+        #ensure there is an empty folder
+        create_empty_folder(self._folder)
+        
         times = [] #track the times of each of the runs
         all_moves = [] #track all the moves made so that they can be put into a csv at the end
         
@@ -92,7 +93,7 @@ class RailroadInkPlayer:
         #these are not necessarily going to be the same depending on the solver, so raising an error
         #isn't really appropriate, and if there are batch results then any printing won't do much
         #so create a file 
-        if score != s.get_result():
+        if abs(score - s.get_result()) > 0.1:
             errorPath = "{0}/{1}".format(self._folder, ERROR_FILE)
             with open(errorPath, 'w') as errorFile:
                 errorFile.write("MILP: {0}\nBoard: {1}".format(s.get_result(), score))
@@ -178,16 +179,7 @@ class RailroadInkPlayer:
             for move in all_moves:
                 csv_writer.writerow([move[0].get_piece(), move[0].get_rotation(), move[0].get_flip(),
                                      move[1][0], move[1][1], move[2]])
-          
-    """
-    generate the model used for making the move, this will be overridden in a subclass
-    to allow for different move makers
-    """
-    @abstractmethod
-    def _move_model(self, board, turn, dice):
-        pass
     
-
 #class OnePieceLookAheadPlayer(Player):
 #    
 #    def __init__(self):
@@ -208,31 +200,6 @@ class RailroadInkPlayer:
     
 if __name__ == "__main__":
     
-#    d = DiceRollSimulator(42)
-#    rolls = d.generate_game_rolls()
-    
     p = RailroadInkPlayer("greedy-delayed-specials", 42)
     p.play_game(printPictures=True, printOutput=True)
-    
-#    i = InternalSinksPlayer()
-#    i.play_game(rolls, folder="internal-sinks-player", printPictures=True, printOutput=True)
-    
-#    la = OnePieceLookAheadPlayer()
-#    la.play_game(rolls, folder="one-piece-look-ahead", printPictures=True, printOutput=True)
-    
-#    f = FakeConnectionsPlayer()
-#    f.play_game(rolls, folder="fake-connections-reduced-plays", printPictures=True, printOutput=True)
-#    
-#    o = OpenEndsPlayer()
-#    o.play_game(rolls, folder="test", printPictures=True, printOutput=True)
-    
-#    g = GreedyPlayer()
-#    g.play_game(rolls, folder="greedy-delayed-no-connecting-exits", printPictures=True, printOutput=True)
-    
-#    c = ConfigFilePlayer("settings.txt")
-#    c.play_game(rolls, folder="config-player", printPictures=True, printOutput=True)
- 
-#    competitors = [GreedyPlayer(), GreedyPlayerWithDelayedSpecials()]
-#    arena = Arena(competitors)
-#    print(arena.test(2))
     
