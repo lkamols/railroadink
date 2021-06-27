@@ -988,6 +988,9 @@ class RailroadInkSolver:
             csv_writer.writerow(["Gurobi Params"])
             for param in self._gurobi_params:
                 csv_writer.writerow([param, self._gurobi_params[param]])
+            csv_writer.writerow(["Priorities"])
+            for var in self._branch_priorities:
+                csv_writer.writerow([var, self._branch_priorities[var]])
                 
     """
     make a csv containing all the information about this run, such as the time taken, lazy constraints
