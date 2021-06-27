@@ -110,35 +110,35 @@ class RailroadInkSolver:
     
     """
     generates all possible scenarios using the dice rolls. Does this recursively so must be passed lists to build
-    currentList - the current scenario 
+    current_list - the current scenario 
     D - list of all final scenarios
     C - list of every step in every scenario
     to generate all possible scenarios, call with self._generate_scenarios([], D, C) with D, C initialise as []
     """
-    def _generate_scenarios(self, currentList, D, C):
-        if len(currentList) == len(self._dice_rolls):
-            D += [tuple(currentList)]
+    def _generate_scenarios(self, current_list, D, C):
+        if len(current_list) == len(self._dice_rolls):
+            D += [tuple(current_list)]
         else:
-            nextIndex = len(currentList)
-            for nextVal in range(len(self._dice_rolls[nextIndex])):
-                currentList += [nextVal]
-                self._generate_scenarios(currentList, D, C)
-        C += [tuple(currentList)]
-        if len(currentList) > 0:
-            currentList.pop()    
+            next_index = len(current_list)
+            for next_val in range(len(self._dice_rolls[next_index])):
+                current_list += [next_val]
+                self._generate_scenarios(current_list, D, C)
+        C += [tuple(current_list)]
+        if len(current_list) > 0:
+            current_list.pop()    
     
     """
     create and solve an IP that gives the solutions to the railroad ink problem
     folder - a folder to print all information to, this will include the log, the results csv and any pictures,
             saves to "last-run" if no folder is specified, if None will not do any saving at all
     linear - if True, runs an LP, if False runs the IP
-    printOutput - whether to print Gurobi output to stdout
+    print_output - whether to print Gurobi output to stdout
     printD - a list of scenarios to print pictures for, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
     tune - if non-zero, will perform a tune with the given length of time instead of a normal search
     lazy_constraints - whether or not to include lazy constraints
     """
-    def solve(self, folder="last-run", linear=False, printOutput=False, printD=[], seed=0, tune=0,
+    def solve(self, folder="last-run", linear=False, print_output=False, printD=[], seed=0, tune=0,
               lazy_constraints=True):
 
         self._start_time = time.time()
@@ -173,7 +173,7 @@ class RailroadInkSolver:
             self._callback(model, where)
 
         #redirect all output in this context, potentially to nowhere if we are not printing to stdout
-        with contextlib.redirect_stdout(self._print_stream_location(printOutput)):
+        with contextlib.redirect_stdout(self._print_stream_location(print_output)):
             self._set_gurobi_parameters(seed, folder, tune, lazy_constraints)
             
             if tune == 0:
@@ -301,7 +301,6 @@ class RailroadInkSolver:
         self.V = {(s,ss,e,d) : m.addVar(vtype=self._binary('V'), ub=1) 
                 for s in S for ss in self._board.adjacents(s) for e in E for d in D}
 
-          
         #w variables are for any fake connections made
         if self._fake_connections:
             self.W = {(s,ss,e,d) : m.addVar(vtype=self._binary('W'), ub=1) 
@@ -369,8 +368,7 @@ class RailroadInkSolver:
             
         #SCORING VARIABLES
         #the score for every final scenario
-        self.Alpha = {d : m.addVar() for d in D}
-            
+        self.Alpha = {d : m.addVar() for d in D}     
             
     """
     adjust the branch priorities according to the branch priority dictionary
@@ -530,8 +528,7 @@ class RailroadInkSolver:
                         if c != tuple():
                             self.earlier_move_connection[t,s,c] = m.addConstr(X[t,s,c] 
                                     <= quicksum(X[tt,ss,cc] for (ss,tt) in connections for cc in prefixes(c)))
-                        
-                        
+                                    
         #detection of open ends
         if self._open_ends:
             Z = self.Z
@@ -606,9 +603,7 @@ class RailroadInkSolver:
             self.internal_sink_connections_2 = {(s,ss,o,e,d) :
                 m.addConstr(Q[s,ss,o,e,d] <= 1 - quicksum(X[t,ss,c] for t in T for c in prefixes(d)))
                 for s in S for ss in self._board.adjacents(s) for o in O for e in E for d in D}
-            
-
-               
+ 
         #flow variables can only be set if the connection exists on that edge
         self.flow_existence = {(s,ss,o,e,d):
             m.addConstr(F[s,ss,o,e,d] <= Y[s,ss,e,d])
@@ -822,11 +817,11 @@ class RailroadInkSolver:
     
     """
     determine where to print stdout to depending on whether or not we want to see it
-    if printOutput is True, returns stdout, if False returns a fake printer that does nothing
+    if print_output is True, returns stdout, if False returns a fake printer that does nothing
     """
-    def _print_stream_location(self, printOutput):
+    def _print_stream_location(self, print_output):
         #set up where to print to
-        if printOutput == True:
+        if print_output == True:
             return sys.stdout #continue printing to stdout
         else:
             return EmptyPrinter() #print to my terrible printer that doesn't do anything
@@ -1001,18 +996,18 @@ class RailroadInkSolver:
     """
     find the pieces that are missing given the played tiles and the expected count for pieces
     """
-    def _find_missing_pieces(self, playedTiles, expectedPieceCounts):
+    def _find_missing_pieces(self, played_tiles, expected_piece_counts):
         #next check using the played tiles that enough have been played
-        answerCounts = {}
-        for tile, square in playedTiles:
-            answerCounts[tile.get_piece()] = answerCounts.get(tile.get_piece(),0) + 1
+        answer_counts = {}
+        for tile, square in played_tiles:
+            answer_counts[tile.get_piece()] = answer_counts.get(tile.get_piece(),0) + 1
             
         #check through and ensure enough have been played and track any pieces that are missing
-        missingPieces = []
-        for piece in expectedPieceCounts:
-            if expectedPieceCounts[piece] > answerCounts.get(piece,0):
-                missingPieces += [piece]
-        return missingPieces
+        missing_pieces = []
+        for piece in expected_piece_counts:
+            if expected_piece_counts[piece] > answer_counts.get(piece,0):
+                missing_pieces += [piece]
+        return missing_pieces
     
     """
     returns True if the placement of tile at square s is a valid move on the board,
@@ -1038,11 +1033,11 @@ class RailroadInkSolver:
     
     
     """
-    returns True if one of the missingPieces can be played on the board, False if they cannot
+    returns True if one of the missing_pieces can be played on the board, False if they cannot
     """
-    def _can_place_a_missing_piece(self, missingPieces):
+    def _can_place_a_missing_piece(self, missing_pieces):
         #now for every missing piece, we need to check if there is absolutely anywhere it could go
-        for piece in missingPieces:
+        for piece in missing_pieces:
             variations = Tile.get_variations(piece) #get the possible orientations
             #check to see if there is anywhere this piece could be placed
             for s in self.I:
@@ -1064,7 +1059,6 @@ class RailroadInkSolver:
         E = self.E
         L = self.L
         M = self.M
-        
         
         if len(d) == len(self._dice_rolls): #we are on the final roll
             #use the existing board and check for loops, start by looking for any top left corners, as every loop has to have 
@@ -1101,14 +1095,14 @@ class RailroadInkSolver:
     adds any required lazy constraints for isolated placements
     returns True if any have been added, False otherwise
     """
-    def _add_any_isolated_placement_lazy_constraints(self, scenario, playedTiles):
+    def _add_any_isolated_placement_lazy_constraints(self, scenario, played_tiles):
         m = self.m
         S = self.S
         T = self.T
         X = self.X
         
         #check if the played tiles are valid placements, i.e have connections to the board
-        tilesToAdd = list(playedTiles) #copy the played tiles to a list for adding to the board
+        tilesToAdd = list(played_tiles) #copy the played tiles to a list for adding to the board
         #iterate through the list of played tiles, adding any connecting to the board to the board,
         #iterate until there is a run where no tiles are added
         anyAdds = True
@@ -1177,24 +1171,24 @@ class RailroadInkSolver:
             tilesToCheck += Tile.get_variations(piece)
         
         #search through the current solution to see which pieces have been played
-        playedTiles = []
+        played_tiles = []
         for s in I:
             for tile in tilesToCheck:
                 if XV[tile,s,scenario] > 0.9:
-                    playedTiles += [(tile,s)]
+                    played_tiles += [(tile,s)]
         
         if self._isolated_pieces == "lazy":            
-            isolatedPieces = self._add_any_isolated_placement_lazy_constraints(scenario, playedTiles)
+            isolatedPieces = self._add_any_isolated_placement_lazy_constraints(scenario, played_tiles)
         else:
             isolatedPieces = False
                                                 
         #if there were no isolated pieces, then all pieces were added to the board in the earlier process
-        missingPieces = self._find_missing_pieces(playedTiles, pieceCounts)
+        missing_pieces = self._find_missing_pieces(played_tiles, pieceCounts)
         
-        canPlaceMissingPiece = self._can_place_a_missing_piece(missingPieces)
+        canPlaceMissingPiece = self._can_place_a_missing_piece(missing_pieces)
         if canPlaceMissingPiece:
-            m.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in playedTiles) #we can move an already played tile
-                            + quicksum(X[t,s,scenario] for piece in missingPieces for t in Tile.get_variations(piece) 
+            m.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in played_tiles) #we can move an already played tile
+                            + quicksum(X[t,s,scenario] for piece in missing_pieces for t in Tile.get_variations(piece) 
                                     for s in I if self._board.get_piece_at(s) == Piece.BLANK) #play a missing piece
                             + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in I) 
                                     if not self._board.all_specials_used() else 0)) #play a special piece
@@ -1209,7 +1203,7 @@ class RailroadInkSolver:
                 self._lazy_checks(scenario + (nextRoll,), XV, LV)
             
         #remove the tiles from the board
-        for tile, square in playedTiles:
+        for tile, square in played_tiles:
             self._board.remove_tile(square)
     
 """
@@ -1244,14 +1238,14 @@ if __name__ == "__main__":
 #    board = rulebook_game()
 #    dice_rolls = rulebook_dice_rolls()
 #    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", fake_connections=True)
-#    s.solve(folder="rulebook", printOutput=True, printD="all")
+#    s.solve(folder="rulebook", print_output=True, printD="all")
     
     #board = Board()
 #    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1)],
 #                   [DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1)]]
 #    #s = RailroadInkSolver(board, 1, dice_rolls, "open-ends", specials=False, isolated_pieces="relief")
 #    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, isolated_pieces="relief")
-#    s.solve(folder="test", printOutput=True, printD="all")
+#    s.solve(folder="test", print_output=True, printD="all")
 
 #    board = Board()
 #    
@@ -1273,7 +1267,7 @@ if __name__ == "__main__":
 #                   DiceRoll({Piece.OVERPASS : 1}, 1.0/9)]]
 #    
 #    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, isolated_pieces="relief")
-#    s.solve(folder="test", printOutput=True, printD="all")  
+#    s.solve(folder="test", print_output=True, printD="all")  
     
     
     
@@ -1310,4 +1304,4 @@ if __name__ == "__main__":
 
     #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
     s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
-    s.solve(printOutput=True, printD="all")
+    s.solve(print_output=True, printD="all")
