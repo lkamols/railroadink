@@ -4,6 +4,7 @@ from railroadInkSolver import RailroadInkSolver, RESULTS_FOLDER
 from board import Board, DiceRoll, BASIC_PIECES, JUNCTION_PIECES
 import random
 import csv
+import json
 
 TURNS = 7
 ARENA_FOLDER = "arena"
@@ -13,6 +14,8 @@ SCORE_CSV = "score.csv"
 INFO_CSV = "info.csv"
 MOVES_CSV = "moves.csv"
 ERROR_FILE = "MISMATCH.txt"
+
+BASE_CONFIG_NAME = "BASE"
 
 """
 abstract class for a player of the game, has the ability to run a full game
@@ -206,6 +209,33 @@ class InternalSinksPlayer(Player):
 
     def player_name(self):
         return "Internal Sinks Player"
+    
+"""
+player based on a config file
+"""
+class ConfigFilePlayer(Player):
+    
+    def __init__(self, file):
+        #read in the config file which is stored as a json
+        with open(file) as jsonFile:
+            self._config = json.load(jsonFile)
+        #convert the base arguments into a dictionary, this dictionary can be updated on any turn
+        #if this is empty, leave kwargs empty (although this will throw an error on the call)
+        self._kwargs = {}
+        for kw in self._config.get(BASE_CONFIG_NAME, {}):
+            self._kwargs[kw] = self._config[BASE_CONFIG_NAME][kw]  
+        
+    def _move_model(self, board, turn, dice):
+        #update any dictionary entries that are to be overridden (if there are any at all)
+        turnName = 'TURN {0}'.format(turn)
+        #if there is no entry, just iterate through an empty dictionary (i.e do nothing)
+        for kw in self._config.get(turnName, {}):
+            self._kwargs[kw] = self._config[turnName][kw]
+        #then make the call to the solver with the given kwargs
+        return RailroadInkSolver(board, turn, [[DiceRoll(dice, 1)]], **self._kwargs)
+        
+    def player_name(self):
+        return "Config File Player"
 
 """
 class for simulating dice rolls and generating games
@@ -303,8 +333,11 @@ if __name__ == "__main__":
 #    o = OpenEndsPlayer()
 #    o.play_game(rolls, folder="test", printPictures=True, printOutput=True)
     
-    g = GreedyPlayer()
-    g.play_game(rolls, folder="greedy-delayed-no-connecting-exits", printPictures=True, printOutput=True)
+#    g = GreedyPlayer()
+#    g.play_game(rolls, folder="greedy-delayed-no-connecting-exits", printPictures=True, printOutput=True)
+    
+    c = ConfigFilePlayer("settings.txt")
+    c.play_game(rolls, folder="config-player", printPictures=True, printOutput=True)
  
 #    competitors = [GreedyPlayer(), GreedyPlayerWithDelayedSpecials()]
 #    arena = Arena(competitors)
