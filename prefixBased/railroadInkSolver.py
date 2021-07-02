@@ -10,8 +10,16 @@ import shutil
 import sys
 import contextlib
 import time
+import os
 
-RESULTS_FOLDER = "results"
+#adjust the results folder based on where this is being called
+#hardcode this to ensure that whenever files are copied to and from the cluster
+#that it always saves to the right place
+if "uqlkamol" in os.getcwd():
+    RESULTS_FOLDER = "/data/uqlkamol/railroad-ink-results"
+else:
+    RESULTS_FOLDER = "results"
+    
 RESULTS_CSV = "points.csv"
 MOVES_CSV = "moves.csv"
 SETTINGS_CSV = "settings.csv"
@@ -129,8 +137,7 @@ class RailroadInkSolver:
     
     """
     create and solve an IP that gives the solutions to the railroad ink problem
-    folder - a folder to print all information to, this will include the log, the results csv and any pictures,
-            saves to "last-run" if no folder is specified, if None will not do any saving at all
+    folder - a folder to print all information to, this will include the log, the results csv and any pictures
     linear - if True, runs an LP, if False runs the IP
     print_output - whether to print Gurobi output to stdout
     printD - a list of scenarios to print pictures for, or "all" if all scenarios should be printed, default is to not print
@@ -143,7 +150,7 @@ class RailroadInkSolver:
 
         self._start_time = time.time()
         
-        folder = RESULTS_FOLDER + "/" + folder #update the folder name, always in the RESULTS top folder
+        folder = "{0}/{1}".format(RESULTS_FOLDER, folder) #update the folder name
             
         #create an empty folder to store all the results in
         create_empty_folder(folder)

@@ -49,7 +49,7 @@ class RailroadInkPlayer:
     """
     play a full game of Railroad Ink with the given player and dice rolls (from the seed)
     """
-    def play_game(self, printPictures=False, printOutput=False):
+    def play_game(self, print_pictures=False, print_output=False):
         #start by creating an empty board
         board = Board()
         
@@ -69,7 +69,7 @@ class RailroadInkPlayer:
             
             s = RailroadInkSolver(board, turn, dice_rolls, **self._kwargs)
             
-            s.solve(folder=turnFolder, printOutput=printOutput)
+            s.solve(folder=turnFolder, print_output=print_output)
             #now we need to get out the information from this
             #we only care about the moves made on the first turn, sequence (0,)
             moves = s.get_moves_made()[(0,)]
@@ -80,7 +80,7 @@ class RailroadInkPlayer:
             #update the list of solve times
             times.append(s.get_gurobi_runtime())
         
-        if printPictures:
+        if print_pictures:
             board.fancy_board_print(file="{0}/{1}".format(self._folder, PHOTO_FILENAME))
                 
         #now make a CSV containing the scoring information about the run and get the calculated score
@@ -201,5 +201,5 @@ class RailroadInkPlayer:
 if __name__ == "__main__":
     
     p = RailroadInkPlayer("greedy-delayed-specials", 42)
-    p.play_game(printPictures=True, printOutput=True)
+    p.play_game(print_pictures=True, print_output=True)
     
