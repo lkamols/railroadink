@@ -45,6 +45,8 @@ DEFAULT_GUROBI_PARAMS = {'Heuristics': 0.001,
 
 DEFAULT_PRIORITIES = {"Y": 10}
 
+DEFAULT_TIMEOUTS = [-1, -1, -1, -1, -1, -1, -1]
+
 """
 returns a list of all the prefixes of the supplied tuple
 """
@@ -81,6 +83,7 @@ class RailroadInkSolver:
     internal_sink_scores - determines how many points are scored for internal super sink connections each turn
     binary_set - set of variables to make binary
     gurobi_params - dictionary of gurobi parameters to set
+    timeouts - array of timeouts, -1 at each index if there shouldn't be a timeout
     """
     def __init__(self, board, turn, dice_rolls, objective, specials=True, 
                  isolated_pieces="lazy",
@@ -90,7 +93,8 @@ class RailroadInkSolver:
                  internal_sinks=False, internal_sink_scores=DEFAULT_INTERNAL_SINK_SCORES,
                  binary_set=DEFAULT_BINARY_SET,
                  gurobi_params=DEFAULT_GUROBI_PARAMS,
-                 branch_priorities=DEFAULT_PRIORITIES):
+                 branch_priorities=DEFAULT_PRIORITIES,
+                 timeouts=DEFAULT_TIMEOUTS):
         self._board = board
         self._turn = turn
         self._dice_rolls = dice_rolls
@@ -110,6 +114,7 @@ class RailroadInkSolver:
         self._binary_set = binary_set
         self._gurobi_params = gurobi_params
         self._branch_priorities = branch_priorities
+        self._timeouts = timeouts
         #check for if there is even a special to be played, don't add them to the model if there isn't
         if self._board.all_specials_used():
             self._specials = False
@@ -802,6 +807,9 @@ class RailroadInkSolver:
                 self.m.setParam(param, self._gurobi_params[param])
         else:
             self.m.setParam('TuneTimeLimit', tune)
+        #set up the timeout if it is needed
+        if self._timeouts[self._turn - 1] != -1:
+            self.m.setParam('TimeLimit', self._timeouts[self._turn - 1])
         self.m.setParam('LogFile', folder + "/log.txt")
 
     #############################OUTPUT######################################
@@ -964,6 +972,7 @@ class RailroadInkSolver:
             csv_writer.writerow(["fake_connections_max"] + self._fake_connections_max)
             csv_writer.writerow(["internal_sink_scores"] + self._internal_sink_scores)
             csv_writer.writerow(["binary_set"] + list(self._binary_set))
+            csv_writer.writerow(["timeouts"] + self._timeouts)
             csv_writer.writerow(["Gurobi Params"])
             for param in self._gurobi_params:
                 csv_writer.writerow([param, self._gurobi_params[param]])
@@ -1310,5 +1319,5 @@ if __name__ == "__main__":
     #dice_rolls = [[DiceRoll({}, 1)]]
 
     #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
-    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score")
+    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", timeouts=[5,5,5,5,5,5,5])
     s.solve(print_output=True, printD="all")
