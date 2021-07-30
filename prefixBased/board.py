@@ -1234,13 +1234,25 @@ def rulebook_dice_rolls():
 
 if __name__ == "__main__":
 
-    board = rulebook_game()
+    #board = rulebook_game()
     #board = Board()
-    board.fancy_board_print("turn-6.png")
-    reps = board.find_clusters()
+    #board.fancy_board_print("turn-6.png")
+    #reps = board.find_clusters()
     #print(board.score())
 #    moves = board.all_possible_moves({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
 #                                      Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1})
 #    print(board.best_move({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
 #                           Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}))
+    
+    board = Board()
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R270), (1,0),1)
+    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (0,0), 1)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (6,5), 1)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (0,1), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,6), 2)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,6), 2)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 2)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,5), 2)
+    
+    board.fancy_board_print()
     

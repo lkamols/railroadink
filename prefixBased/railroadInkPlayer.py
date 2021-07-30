@@ -153,8 +153,12 @@ class RailroadInkPlayer:
         scoreFile = "{0}/{1}".format(self._folder, SCORE_CSV)
         with open(scoreFile, mode="w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=",")
-            csv_writer.writerow(["Score", "Connecting Exits", "Longest Railway", "Longest Highway", "Centre Points", "Errors"])
-            csv_writer.writerow([score, joining_exits_points, longest_railway, longest_highway, centre_points, errors])
+            csv_writer.writerow(["Score", score])
+            csv_writer.writerow(["Connecting Exits", joining_exits_points])
+            csv_writer.writerow(["Longest Railway", longest_railway])
+            csv_writer.writerow(["Longest Highway", longest_highway])
+            csv_writer.writerow(["Centre Points", centre_points])
+            csv_writer.writerow(["Errors", errors])
         return score
     
     """

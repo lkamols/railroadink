@@ -68,7 +68,7 @@ class TestingSuite:
         if seed != None:
             random.seed(seed)
         #create the solver object
-        s = RailroadInkSolver(board, turn, dice_rolls, objective)
+        s = RailroadInkSolver(board, turn, dice_rolls, objective, path_loops="lazy")
         success = True #whether this run was successful
         #want the sum, min and max execution time, both in gurobi execution and total time
         gurobi_times = [0, float("inf"), 0]

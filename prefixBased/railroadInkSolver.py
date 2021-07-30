@@ -35,9 +35,9 @@ DEFAULT_INTERNAL_SINK_SCORES = [3,3,2.5,2,1.5,1,0]
 #the variables that must be binary for the model to be correct
 MINIMAL_BINARY_SET = {'X', 'J'}
 #the default choices
-DEFAULT_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'R', 'J', 'G', 'Q', 'K', 'M'}
+DEFAULT_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'J', 'G', 'Q', 'K', 'M'}
 #all possible binaries values
-MAXIMAL_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'R', 'F', 'FF', 'J', 'G', 'Q', 'K', 'L', 'M'}
+MAXIMAL_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'F', 'FF', 'J', 'G', 'Q', 'K', 'L', 'M'}
 
 DEFAULT_GUROBI_PARAMS = {'Heuristics': 0.001,
                          'Cuts': 1,
@@ -71,6 +71,8 @@ class RailroadInkSolver:
     specials - whether or not to consider special moves in the construction
     isolated_pieces - how to handle isolated pieces, options are "lazy" for using lazy constraints or "relief"
             for using a flow problem
+    path_loops - how to handle path loops, options are "lazy" for using lazy constraints or "relief" for using
+            a flow problem
     connecting_exits - whether to score points for connecting exits
     longest_paths - whether to score points for the longest paths
     errors - whether to score/lose points for errors
@@ -86,7 +88,7 @@ class RailroadInkSolver:
     timeouts - array of timeouts, -1 at each index if there shouldn't be a timeout
     """
     def __init__(self, board, turn, dice_rolls, objective, specials=True, 
-                 isolated_pieces="lazy",
+                 isolated_pieces="lazy", path_loops="relief",
                  connecting_exits=True, longest_paths=True, errors=True,
                  open_ends=False, open_end_points=DEFAULT_OPEN_ENDS_POINTS,
                  fake_connections=False, fake_connections_cost=DEFAULT_FAKE_CONNECTIONS_POINTS, fake_connections_max=DEFAULT_FAKE_CONNECTIONS_MAX,
@@ -101,6 +103,7 @@ class RailroadInkSolver:
         self._objective = objective
         self._specials = specials
         self._isolated_pieces = isolated_pieces
+        self._path_loops = path_loops
         self._connecting_exits = connecting_exits
         self._longest_paths = longest_paths
         self._errors = errors
@@ -326,7 +329,7 @@ class RailroadInkSolver:
             
         #r variables for the isolated placement removal flow problem
         if self._isolated_pieces == "relief":
-            self.R = {(s,ss,c) : m.addVar(vtype=self._binary('R'), ub=1) 
+            self.R = {(s,ss,c) : m.addVar(ub=5) 
                     for s in S for ss in self._board.adjacents(s) for c in C if c != tuple()}
         
         #CONNECTING START POINTS VARIABLES
@@ -474,12 +477,12 @@ class RailroadInkSolver:
             #can have a connection on an edge from either side if there is a real placement or a fake placement
             self.connections = {(s,ss,e,d) :
                 m.addConstr(Y[s,ss,e,d] <= V[s,ss,e,d] + W[s,ss,e,d])
-                for s in S for ss,side in self._board.adjacents_with_sides(s) for e in E for d in D}
+                for s in S for ss in self._board.adjacents(s) for e in E for d in D}
         else: 
             #can have a connection on an edge only if there is actually a connection there
             self.connections = {(s,ss,e,d) :
                 m.addConstr(Y[s,ss,e,d] <= V[s,ss,e,d])
-                for s in S for ss,side in self._board.adjacents_with_sides(s) for e in E for d in D}
+                for s in S for ss in self._board.adjacents(s) for e in E for d in D}
             
         #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
         #this needs to hold across every final scenario, only consider the final scenarios as the earlier ones are
@@ -505,17 +508,17 @@ class RailroadInkSolver:
             #we can have a relief connection from any piece played on this turn with a connection on that edge
             self.relief_connections_1 = {(s,ss,c):
                 m.addConstr(R[s,ss,c] <= 5*quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(side) != EdgeType.B))
-                for s in S for ss,side in self._board.adjacents_with_sides(s) for c in C if c != tuple()}
+                for s in I for ss,side in self._board.adjacents_with_sides(s) for c in C if c != tuple()}
             #we can have a relief connection to any piece played with a connection on that edge on this turn or earlier
             self.relief_connections_2 = {(s,ss,c):
                 m.addConstr(R[s,ss,c] <= 5*quicksum(X[t,ss,cc] for cc in prefixes(c) 
                                          for t in T if t.get_edge_type_on_side(Side.opposite(side)) != EdgeType.B))
-                for s in S for ss,side in self._board.adjacents_with_sides(s) for c in C if c != tuple()}
+                for s in I for ss,side in self._board.adjacents_with_sides(s) for c in C if c != tuple()}
                 
             self.relief_flow = {(s,c):
                 m.addConstr(quicksum(X[t,s,c] for t in T) + quicksum(R[ss,s,c] for ss in self._board.adjacents(s)) <=
                             quicksum(R[s,ss,c] for ss in self._board.adjacents(s)) + 5*quicksum(X[t,s,cc] for t in T for cc in prefixes(c) if c != cc))
-                for s in S for c in C if c != tuple()}
+                for s in I for c in C if c != tuple()}
         else:
             #any played piece must be connected to a piece played earlier or on this turn
             self.earlier_move_connection = {}
@@ -545,14 +548,21 @@ class RailroadInkSolver:
         if self._open_ends:
             Z = self.Z
             #only have an open end if there is an edge on that side
-            self._open_end_scoring_1 = {(s,ss,d):
-                m.addConstr(Z[s,ss,d] <=  quicksum(X[t,s,c] for t in T if t.get_edge_type_on_side(side) != EdgeType.B for c in prefixes(d)))
-                for s in I for ss,side in self._board.adjacents_with_sides(s, internal=True) for d in D}           
+            self.open_end_scoring_1 = {(s,ss,d):
+                m.addConstr(Z[s,ss,d] <=  quicksum(V[s,ss,e,d] for e in E))
+                for s in I for ss in self._board.adjacents(s, internal=True) for d in D}           
               
             #not an open end if there is anything on the other side
-            self._open_end_scoring_2 = {(s,ss,d): 
+            self.open_end_scoring_2 = {(s,ss,d): 
                 m.addConstr(Z[s,ss,d] <= 1 - quicksum(X[t,ss,c] for t in T for c in prefixes(d)))
                 for s in I for ss in self._board.adjacents(s,internal=True) for d in D}
+                
+        #if it is turn 1, reduce symmetry by forcing the top left to have more pieces
+        if self._turn == 1:
+            self._symmetry_removal = {
+                    m.addConstr(quicksum(X[t,(row,col),c] for row in range(3) for col in range(3) for t in T ) >=
+                                quicksum(X[t,(row,col),c] for row in range(rS, rS+3) for col in range(cS, cS+3) for t in T ))
+                    for (rS, cS) in [(0,4),(4,0),(4,4)] for c in C if len(c) == 1}
 
     """
     constraints for joining exits
@@ -562,7 +572,6 @@ class RailroadInkSolver:
         m = self.m
         T = self.T
         S = self.S
-        C = self.C
         D = self.D
         E = self.E
         I = self.I
@@ -642,13 +651,6 @@ class RailroadInkSolver:
             m.addConstr((NUM_STARTS - 1)*J[d] <= quicksum(G[s,o,d] for s in O for o in O if s != o))
             for d in D}
             
-        #if it is turn 1, reduce symmetry by forcing the top left to have more pieces
-        if self._turn == 1:
-            self._symmetry_removal = {
-                    m.addConstr(quicksum(X[t,(row,col),c] for row in range(3) for col in range(3) for t in T ) >=
-                                quicksum(X[t,(row,col),c] for row in range(rS, rS+3) for col in range(cS, cS+3) for t in T ))
-                    for (rS, cS) in [(0,4),(4,0),(4,4)] for c in C if len(c) == 1}
-            
 #        self.transitivity_removal = {(s, ss, sss) :
 #            m.addConstr(G[ss,s,d] <= 1 - G[sss,ss,d])
 #            for s in O for ss in O for sss in O for d in D if s < ss and ss < sss}
@@ -695,38 +697,33 @@ class RailroadInkSolver:
             m.addConstr(L[s,ss,e,d] <= K[s,e,d] + quicksum(L[s,sss,e,d] for sss in self._board.adjacents(s, internal=True) if ss != sss))
             for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
             
-        #size 4 loop constraints for the LP, cuts off loops 
-        self.lp_constraints_3 = {((r,c),e,d) :
-            m.addConstr((3/4)*(M[(r,c),e,d] + M[(r,c+1),e,d] + M[(r+1,c),e,d] + M[(r+1,c+1),e,d]) >=
-                        L[(r,c),(r,c+1),e,d] + L[(r,c),(r+1,c),e,d] +
-                        L[(r,c+1),(r+1,c+1),e,d] + L[(r+1,c),(r+1,c+1),e,d])
-            for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}
-            
         #there can only be flow on edges that have a connection of that type
         self.only_on_connected_edges = {(s,ss,e,d) :
             m.addConstr(L[s,ss,e,d] <= Y[s,ss,e,d])
             for s in I for ss in self._board.adjacents(s, internal=True, forward=True) for e in E for d in D}
-
-        #remove all size 4 loops by default, unneccessary but should help a bit
-#        self.no_size_4_loops = {((r,c),e,d) :
-#            m.addConstr(L[(r,c),(r,c+1),e,d] + L[(r,c),(r+1,c),e,d] +
-#                        L[(r,c+1),(r+1,c+1),e,d] + L[(r+1,c),(r+1,c+1),e,d] <= 3)
-#            for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}
             
         #don't set a start location and not have it scoring, this may be redundant with the two_ends equality
         self.end_bounds = {(s,e,d) :
             m.addConstr(K[s,e,d] <= M[s,e,d])
             for s in I for e in E for d in D}
             
-        #relief constraints
-        self.path_relief = {(s,e,d) :
-            m.addConstr(quicksum(N[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)) + 16 * K[s,e,d] >=
-                        quicksum(N[ss,s,e,d] for ss in self._board.adjacents(s, internal=True)) + M[s,e,d])
-            for s in I for e in E for d in D}
-            
-        self.path_relief_on_edges = {(s,ss,e,d) :
-            m.addConstr(N[s,ss,e,d] <= 16 * L[s,ss,e,d])
-            for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
+        if self._path_loops == "relief":
+            #relief constraints
+            self.path_relief = {(s,e,d) :
+                m.addConstr(quicksum(N[s,ss,e,d] for ss in self._board.adjacents(s, internal=True)) + 16 * K[s,e,d] >=
+                            quicksum(N[ss,s,e,d] for ss in self._board.adjacents(s, internal=True)) + M[s,e,d])
+                for s in I for e in E for d in D}
+                
+            self.path_relief_on_edges = {(s,ss,e,d) :
+                m.addConstr(N[s,ss,e,d] <= 16 * L[s,ss,e,d])
+                for s in I for ss in self._board.adjacents(s, internal=True) for e in E for d in D}
+        elif self._path_loops == "lazy":
+            #remove all size 4 loops by default, larger loops handled in lazy constraints
+            self.size_4_loops = {((r,c),e,d) :
+                m.addConstr((3/4)*(M[(r,c),e,d] + M[(r,c+1),e,d] + M[(r+1,c),e,d] + M[(r+1,c+1),e,d]) >=
+                            L[(r,c),(r,c+1),e,d] + L[(r,c),(r+1,c),e,d] +
+                            L[(r,c+1),(r+1,c+1),e,d] + L[(r+1,c),(r+1,c+1),e,d])
+                for r in range(NUM_ROWS-1) for c in range(NUM_COLS-1) for e in E for d in D}          
             
 
     """
@@ -779,9 +776,9 @@ class RailroadInkSolver:
             m.setObjective(quicksum((Alpha[d] 
                                     + (quicksum(self.Z[s,ss,d] for s in I for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._end_turn_index] 
                                              if self._open_ends else 0)
-                                    + (quicksum(self.Q[s,ss,o,e,d] for s in S for ss in self._board.adjacents(s) for o in O for e in E for d in D) * self._internal_sink_scores[self._end_turn_index]
+                                    + (quicksum(self.Q[s,ss,o,e,d] for s in S for ss in self._board.adjacents(s) for o in O for e in E) * self._internal_sink_scores[self._end_turn_index]
                                             if self._internal_sinks else 0)
-                                    - (quicksum(self.W[s,ss,e,d] for s in S for ss in self._board.adjacents(s) for e in E for d in D) * self._fake_connections_cost[self._end_turn_index]
+                                    - (quicksum(self.W[s,ss,e,d] for s in S for ss in self._board.adjacents(s) for e in E) * self._fake_connections_cost[self._end_turn_index]
                                              if self._fake_connections else 0)) 
                                     * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
        
@@ -1176,7 +1173,11 @@ class RailroadInkSolver:
         #unpack some needed variables
         m = self.m
         I = self.I
+        S = self.S
+        T = self.T
         X = self.X #retrieve the X variables
+        
+        
         
         #find the pieces that need to be played in this scenario and the corresponding tiles
         pieceCounts = self._dice_rolls[len(scenario)-1][scenario[-1]].get_dice()
@@ -1203,15 +1204,17 @@ class RailroadInkSolver:
         
         canPlaceMissingPiece = self._can_place_a_missing_piece(missing_pieces)
         if canPlaceMissingPiece:
-            m.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in played_tiles) #we can move an already played tile
-                            + quicksum(X[t,s,scenario] for piece in missing_pieces for t in Tile.get_variations(piece) 
-                                    for s in I if self._board.get_piece_at(s) == Piece.BLANK) #play a missing piece
-                            + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in I) 
-                                    if not self._board.all_specials_used() else 0)) #play a special piece
+            m.cbLazy(1 <= quicksum(1 - X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] > 0.9) +
+                          quicksum(X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] < 0.1))
+            #m.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in played_tiles) #we can move an already played tile
+            #                + quicksum(X[t,s,scenario] for piece in missing_pieces for t in Tile.get_variations(piece) 
+            #                        for s in I if self._board.get_piece_at(s) == Piece.BLANK) #play a missing piece
+            #                + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in I) 
+            #                        if not self._board.all_specials_used() else 0)) #play a special piece
          
         #finally we also want to check for any loops for longest paths
-#        if self._longest_paths:
-#            self._add_any_loop_lazy_constraints(scenario, LV)
+        if self._longest_paths and self._path_loops == "lazy":
+            self._add_any_loop_lazy_constraints(scenario, LV)
             
         #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
         if not canPlaceMissingPiece and not isolatedPieces and len(scenario) < len(self._dice_rolls):
@@ -1288,36 +1291,44 @@ if __name__ == "__main__":
     
     
     board = Board()
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
-    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
-    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+    #board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+    #board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+    #board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+    #board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
     board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
     board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
     board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
     board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
     
     dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
                                  Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
                       [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
-                                 Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)]]
+                                 Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)],
+                    [DiceRoll({Piece.HIGHWAY_CORNER : 1, Piece.RAILWAY_STRAIGHT : 2,
+                               Piece.CORNER_STATION : 1}, 1)],
+                    [DiceRoll({Piece.RAILWAY_STRAIGHT : 2, Piece.HIGHWAY_STRAIGHT : 1,
+                               Piece.CORNER_STATION : 1}, 1)],
+                    [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.OVERPASS : 1,
+                               Piece.HIGHWAY_CORNER : 1, Piece.HIGHWAY_STRAIGHT : 1}, 1)],
+                    [DiceRoll({Piece.HIGHWAY_STRAIGHT : 2, Piece.HIGHWAY_T : 1,
+                               Piece.CORNER_STATION : 1}, 1)]]
     
     #dice_rolls = [[DiceRoll({}, 1)]]
 
     #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
-    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", timeouts=[5,5,5,5,5,5,5])
+    s = RailroadInkSolver(board, 2, dice_rolls, "expected-score")
     s.solve(print_output=True, printD="all")
