@@ -658,13 +658,16 @@ class Board:
     
     """
     determine all the possible moves that could be made from here with a given dictionary of pieces and counts
+    if include_specials is True, allow for special pieces if there remain available specials
     """
-    def all_possible_moves(self, pieces):
+    def all_possible_moves(self, pieces_to_use, include_specials=True):
         if not self._clusters_up_to_date:
             self.find_clusters()
         
+        #copy the pieces dictionary to a local dictionary to not change it
+        pieces = dict(pieces_to_use)
         #if there is a special piece available, add one to the pieces dictionary
-        if not self.all_specials_used():
+        if include_specials and not self.all_specials_used():
             pieces[Piece.SPECIAL] = 1
             
         #generate all the tile variations for all of them
@@ -691,7 +694,8 @@ class Board:
         #now set the recursive function in motion
         all_moves = set()
         self.possible_moves([], pieces, variations, edges, free_squares, all_moves, set())
-        return all_moves
+        #return all the possible moves, as a list so it is quicker to iterate over
+        return list(all_moves)
         
     """
     determines all the possible moves with the given pieces with the current set of edges to join to
@@ -779,9 +783,6 @@ class Board:
             #if this was the base case, then add this to the set of all moves
             if base_case:
                 all_moves.add(tuple(sorted(move_list)))
-                
-                if len(all_moves) % 2000 == 0:
-                    print(len(all_moves))
     
     """
     brute force approach to finding the best move that can be made,
@@ -1245,14 +1246,17 @@ if __name__ == "__main__":
 #                           Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}))
     
     board = Board()
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R270), (1,0),1)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (0,0), 1)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (6,5), 1)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (0,1), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,6), 2)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,6), 2)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 2)
-    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,5), 2)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R270), (1,0),1)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (0,0), 1)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (6,5), 1)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (0,1), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,6), 2)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,6), 2)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 2)
+#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,5), 2)
     
-    board.fancy_board_print()
+    #board.fancy_board_print()
+    a = board.all_possible_moves({Piece.RAILWAY_T : 4}, include_specials=False)
+    #print(a)
+    print(len(a))
     

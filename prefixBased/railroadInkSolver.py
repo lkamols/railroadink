@@ -35,9 +35,9 @@ DEFAULT_INTERNAL_SINK_SCORES = [3,3,2.5,2,1.5,1,0]
 #the variables that must be binary for the model to be correct
 MINIMAL_BINARY_SET = {'X', 'J'}
 #the default choices
-DEFAULT_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'J', 'G', 'Q', 'K', 'M'}
+DEFAULT_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'J', 'G', 'Q', 'K', 'M', 'B'}
 #all possible binaries values
-MAXIMAL_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'F', 'FF', 'J', 'G', 'Q', 'K', 'L', 'M'}
+MAXIMAL_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'F', 'FF', 'J', 'G', 'Q', 'K', 'L', 'M', 'B'}
 
 DEFAULT_GUROBI_PARAMS = {'Heuristics': 0.001,
                          'Cuts': 1,
@@ -69,6 +69,7 @@ class RailroadInkSolver:
     objective - which objective function to use, the possible objective functions are:
             "expected-score"
     specials - whether or not to consider special moves in the construction
+    col_gen - whether to generate all possible moves in advance with a priori column generation and use these
     isolated_pieces - how to handle isolated pieces, options are "lazy" for using lazy constraints or "relief"
             for using a flow problem
     path_loops - how to handle path loops, options are "lazy" for using lazy constraints or "relief" for using
@@ -87,7 +88,8 @@ class RailroadInkSolver:
     gurobi_params - dictionary of gurobi parameters to set
     timeouts - array of timeouts, -1 at each index if there shouldn't be a timeout
     """
-    def __init__(self, board, turn, dice_rolls, objective, specials=True, 
+    def __init__(self, board, turn, dice_rolls, objective, specials=True,
+                 col_gen=False,
                  isolated_pieces="lazy", path_loops="relief",
                  connecting_exits=True, longest_paths=True, errors=True,
                  open_ends=False, open_end_points=DEFAULT_OPEN_ENDS_POINTS,
@@ -102,6 +104,7 @@ class RailroadInkSolver:
         self._dice_rolls = dice_rolls
         self._objective = objective
         self._specials = specials
+        self._col_gen = col_gen
         self._isolated_pieces = isolated_pieces
         self._path_loops = path_loops
         self._connecting_exits = connecting_exits
@@ -263,6 +266,11 @@ class RailroadInkSolver:
         self.C = [] #every individual step of a scenario possible
         self.D = [] #all the final (Last) scenarios / dice rolls
         self._generate_scenarios([], self.D, self.C)   
+        
+        #if we are using column generation, then generate all the possible moves
+        if self._col_gen:
+            self.A = self._board.all_possible_moves(self._dice_rolls[0][0].get_dice(), self._specials)
+            print(len(self.A))
 
 
     """
@@ -300,9 +308,7 @@ class RailroadInkSolver:
             
         #y variables for whether there is a link between adjacent squares with edge type e with dice rolls d
         #these variables are only calculated at the end of the scenarios, not during
-        #for ease, create entries in the opposite direction that point to the same variables
-        #e.g Y[s,ss,e,d] = Y[ss,s,e,d] for all values
-            
+        #for ease, create entries in the opposite direction that point to the same variables            
         self.Y = {}
         for s in S:
             for e in E:
@@ -315,6 +321,11 @@ class RailroadInkSolver:
         #V is for whether there is a connection on each side  
         self.V = {(s,ss,e,d) : m.addVar(vtype=self._binary('V'), ub=1) 
                 for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+        
+        #b variables are for whether any of the generated columns are set
+        if self._col_gen:
+            self.B = {a : m.addVar(vtype=self._binary('B'), ub=1)
+                    for a in self.A}
 
         #w variables are for any fake connections made
         if self._fake_connections:
@@ -433,6 +444,30 @@ class RailroadInkSolver:
                         (self._dice_rolls[len(c) - 1][c[-1]].get_dice().get(p, 0))) 
                         #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
             for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
+        
+        #if we are using column generation, add those constraints
+        if self._col_gen:
+            A = self.A
+            B = self.B
+            #can only pick one column to use overall
+            self.pick_one_col = m.addConstr(quicksum(B[a] for a in A) == 1)
+            
+            #can only set a piece as played if a column containing it is played
+            #this is only done for the first move
+            #do a little preprocessing to reduce the execution time by finding all plays in A that have the same (s,t) pair
+            plays = {}
+            for t in T:
+                for s in S:
+                    plays[t,s] = []
+            for a in A:
+                #go through all the plays in this move
+                for (s,t) in a:
+                    plays[t,s].append(a)
+            self.only_play_if_col_played = {(t,s) :
+                m.addConstr(X[t,s,(0,)] == quicksum(B[a] for a in plays[t,s]))
+                for (t,s) in plays}
+            print(len(self.only_play_if_col_played))
+            
     
         if self._specials:
             #play special pieces at most once each in every possible dice roll scenario
@@ -1256,8 +1291,13 @@ def create_empty_folder(folder):
 if __name__ == "__main__":
 #    board = rulebook_game()
 #    dice_rolls = rulebook_dice_rolls()
-#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", fake_connections=True)
-#    s.solve(folder="rulebook", print_output=True, printD="all")
+#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", specials=True, col_gen=True)
+#    s.solve(print_output=True, printD="all")
+    
+    board = Board()
+    dice_rolls = rulebook_dice_rolls()
+    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, col_gen=False, fake_connections=True)
+    s.solve(print_output=True, printD="all")
     
     #board = Board()
 #    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1)],
@@ -1290,45 +1330,45 @@ if __name__ == "__main__":
     
     
     
-    board = Board()
-    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
-    #board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
-    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
-    #board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
-    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
-    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
-    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
-    #board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
-    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
-    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
-    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
-    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
-    #board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
-    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
-    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
-    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
-    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
-    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
-    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
-    
-    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
-                                 Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
-                      [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
-                                 Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)],
-                    [DiceRoll({Piece.HIGHWAY_CORNER : 1, Piece.RAILWAY_STRAIGHT : 2,
-                               Piece.CORNER_STATION : 1}, 1)],
-                    [DiceRoll({Piece.RAILWAY_STRAIGHT : 2, Piece.HIGHWAY_STRAIGHT : 1,
-                               Piece.CORNER_STATION : 1}, 1)],
-                    [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.OVERPASS : 1,
-                               Piece.HIGHWAY_CORNER : 1, Piece.HIGHWAY_STRAIGHT : 1}, 1)],
-                    [DiceRoll({Piece.HIGHWAY_STRAIGHT : 2, Piece.HIGHWAY_T : 1,
-                               Piece.CORNER_STATION : 1}, 1)]]
-    
-    #dice_rolls = [[DiceRoll({}, 1)]]
-
-    #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
-    s = RailroadInkSolver(board, 2, dice_rolls, "expected-score")
-    s.solve(print_output=True, printD="all")
+#    board = Board()
+#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+#    #board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+#    #board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+#    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+#    #board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+#    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+#    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+#    #board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+#    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+#    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+#    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+#    
+#    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
+#                                 Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
+#                      [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
+#                                 Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)],
+#                    [DiceRoll({Piece.HIGHWAY_CORNER : 1, Piece.RAILWAY_STRAIGHT : 2,
+#                               Piece.CORNER_STATION : 1}, 1)],
+#                    [DiceRoll({Piece.RAILWAY_STRAIGHT : 2, Piece.HIGHWAY_STRAIGHT : 1,
+#                               Piece.CORNER_STATION : 1}, 1)],
+#                    [DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.OVERPASS : 1,
+#                               Piece.HIGHWAY_CORNER : 1, Piece.HIGHWAY_STRAIGHT : 1}, 1)],
+#                    [DiceRoll({Piece.HIGHWAY_STRAIGHT : 2, Piece.HIGHWAY_T : 1,
+#                               Piece.CORNER_STATION : 1}, 1)]]
+#    
+#    #dice_rolls = [[DiceRoll({}, 1)]]
+#
+#    #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
+#    s = RailroadInkSolver(board, 2, dice_rolls, "expected-score")
+#    s.solve(print_output=True, printD="all")
