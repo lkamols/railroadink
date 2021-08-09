@@ -10,7 +10,6 @@ from board import Board, Piece, Rotation, Tile
 from railroadInkSolver import RESULTS_FOLDER
 from railroadInkPlayer import RailroadInkPlayer, INFO_CSV, SCORE_CSV, MOVES_CSV, PHOTO_FILENAME
 
-
 """
 taking a list of files, read them as csvs and merge the results into a dictionary of all the contents of the files
 also returns a list of the entries to maintain an order
@@ -69,10 +68,12 @@ if __name__ == "__main__":
     
     #the first argument determines what to do
     if sys.argv[1] == "play":
+        #use: play player-name seed
         #if the argument is 'play' then play a full game using the next arguments
         player = RailroadInkPlayer(sys.argv[2], int(sys.argv[3]))
         player.play_game(print_pictures=False, print_output=False)
     elif sys.argv[1] == "aggregate":
+        #use: aggregate player-name
         #if the argument is 'aggregate' then go through all of the runs that have been done
         #with the given argument player
         #get the list of subdirectories in the given folder
@@ -85,6 +86,7 @@ if __name__ == "__main__":
             datalists, order = merge_statistics(runs)
             create_aggregate_csv(datalists, order, f"{RESULTS_FOLDER}/{player_name}/{csvfile}")
     elif sys.argv[1] == "genpic":
+        #use: genpic path-to-folder
         #if the argument is "genpic" then generate a picture out of the moves csv in the given folder and
         #store the picture in the same folder
         #the argument is the folder position relative to the results directory
@@ -93,6 +95,11 @@ if __name__ == "__main__":
         board = board_from_file(movesfile)
         board.fancy_board_print(file="{0}/{1}".format(folder, PHOTO_FILENAME))
     elif sys.argv[1] == "turn":
-        pass
+        #use: turn player seed scenario
+        #if the argument is "turn" then do a single turn from the state given in boardfile
+        #first load in the board
+        player = RailroadInkPlayer(sys.argv[2], int(sys.argv[3]), sys.argv[4])
+        player.play_turn(print_pictures=False, print_output=False)
+        
     else:
         raise ValueError("Invalid argument supplied, must be one of\n\t'play', 'aggregate', 'genpic', 'turn'")

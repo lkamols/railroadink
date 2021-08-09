@@ -20,7 +20,7 @@ else:
     RESULTS_FOLDER = "results"
     
 RESULTS_CSV = "points.csv"
-MOVES_CSV = "moves.csv"
+DECISIONS_CSV = "decisions.csv"
 SETTINGS_CSV = "settings.csv"
 INFO_CSV = "info.csv"
 
@@ -970,7 +970,7 @@ class RailroadInkSolver:
         X = self.X
         C = self.C
         
-        movesFile = folder + "/" + MOVES_CSV
+        movesFile = folder + "/" + DECISIONS_CSV
         with open(movesFile, mode="w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=",")
             for c in C:
