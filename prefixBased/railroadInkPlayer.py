@@ -25,7 +25,7 @@ this would be refactored to be a loop over the below function
 but it would change how the rolls are generated so can't be changed
 """
 def generate_game_rolls(game_seed):
-    random.seed(game_seed)
+    random.seed(game_seed) #overrides the set seed for backwards compatability
     rolls = []
     for turn in range(TURNS):
         counts = {} #the counts of each dice rolled
@@ -47,8 +47,7 @@ def generate_game_rolls(game_seed):
 """
 generate a roll for a single turn of Railroad Ink
 """
-def generate_game_roll(game_seed):
-    random.seed(game_seed)
+def generate_game_roll():
     counts = {} #the counts of each dice rolled
     dice = BASIC_PIECES #start with the basic pieces dice
     #roll 4 dice and update the entries for all of them
@@ -62,6 +61,24 @@ def generate_game_roll(game_seed):
         #increase the count of this roll
         counts[roll] = counts.get(roll, 0) + 1
     return counts
+
+
+"""
+generates a full scenario of dice rolls given the rolls argument in the supplied file
+"""
+def generate_scenario(start_roll, rolls):
+    dice_rolls = [[DiceRoll(start_roll, 1)]] #start with this dice roll
+    for arg in rolls:
+        #check if we have an integer (i.e randomly generate this tier with the given number of arguments)
+        if isinstance(arg, int):
+            this_level = []
+            #add rolls for each of the args
+            #this does allow repeats, but they are very rare and in a lot of ways, not an issue
+            for i in range(arg):
+                this_level.append(DiceRoll(generate_game_roll(),1.0/arg))
+            dice_rolls.append(this_level)
+    return dice_rolls            
+
 """
 class for a player of the game, has the ability to run a full game
 simulation, given some configuration file
@@ -91,6 +108,7 @@ class RailroadInkPlayer:
             self._kwargs[kw] = self._config[BASE_CONFIG_NAME][kw] 
             
         self._game_seed = game_seed
+        random.seed(game_seed) #seed the game
         self._scenario = scenario
         
     """
@@ -129,18 +147,20 @@ class RailroadInkPlayer:
         for move in all_moves:
             board.add_tile(move[0], move[1], move[2])
         #then generate the roll 
-        roll = generate_game_roll(self._game_seed)
+        roll = generate_game_roll()
         #determine how the player is supposed to make decisions at this turn by updating the kwargs
         #at each turn up until now
         for i in range(1, turn + 1):
-            self._update_kwargs_dict(turn)
+            self._update_kwargs_dict(i)
         #determine the dice_rolls to use
         dice_rolls = self._get_dice_rolls(roll)
         
-
+        #strip the 'rolls' information from the kwargs to pass them along
+        kwargs = dict(self._kwargs)
+        kwargs.pop("rolls")
         
         #run the game
-        s = RailroadInkSolver(board, turn, dice_rolls, **self._kwargs)
+        s = RailroadInkSolver(board, turn, dice_rolls, **kwargs)
         s.solve(folder=self._call_folder, print_output=print_output)
         
         #unpack the moves that were made and add them to all_moves
@@ -153,8 +173,7 @@ class RailroadInkPlayer:
             board.fancy_board_print(file="{0}/{1}".format(self._folder, PHOTO_FILENAME))     
             
         #make a csv for the moves made
-        self._make_moves_csv(all_moves)
-        #        
+        self._make_moves_csv(all_moves)     
        
     """
     play a full game of Railroad Ink with the given player and dice rolls (from the seed)
@@ -180,7 +199,11 @@ class RailroadInkPlayer:
             self._update_kwargs_dict(turn)
             dice_rolls = self._get_dice_rolls(self._rolls[turn-1])
             
-            s = RailroadInkSolver(board, turn, dice_rolls, **self._kwargs)
+            #strip the 'rolls' information from the kwargs to pass them along
+            kwargs = dict(self._kwargs)
+            kwargs.pop("rolls")
+            
+            s = RailroadInkSolver(board, turn, dice_rolls, **kwargs)
             
             s.solve(folder=turn_folder, print_output=print_output)
             #now we need to get out the information from this
@@ -219,7 +242,10 @@ class RailroadInkPlayer:
     TO DO expand this to work with future moves as well, not just the current move
     """
     def _get_dice_rolls(self, roll):
-        return [[DiceRoll(roll, 1)]]
+        if "rolls" not in self._kwargs:
+            return [[DiceRoll(roll, 1)]]
+        else:
+            return generate_scenario(roll, self._kwargs["rolls"])
     
     """
     updates the currently stored kwargs with the changes on the given turn
