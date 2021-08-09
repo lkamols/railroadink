@@ -70,13 +70,23 @@ def generate_scenario(start_roll, rolls):
     dice_rolls = [[DiceRoll(start_roll, 1)]] #start with this dice roll
     for arg in rolls:
         #check if we have an integer (i.e randomly generate this tier with the given number of arguments)
+        this_turn = []
         if isinstance(arg, int):
-            this_level = []
+            
             #add rolls for each of the args
             #this does allow repeats, but they are very rare and in a lot of ways, not an issue
             for i in range(arg):
-                this_level.append(DiceRoll(generate_game_roll(),1.0/arg))
-            dice_rolls.append(this_level)
+                this_turn.append(DiceRoll(generate_game_roll(),1.0/arg))
+            
+        else:
+            #if it wasn't an integer, then it is an argument with a scenario
+            for roll in arg:
+                #need to change this dictionary
+                pieces = {Piece[p] : roll[0][p] for p in roll[0]} #convert strings to Pieces
+                probability = roll[1]
+                this_turn.append(DiceRoll(pieces, probability))
+                
+        dice_rolls.append(this_turn)
     return dice_rolls            
 
 """
