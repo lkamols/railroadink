@@ -44,6 +44,26 @@ def create_aggregate_csv(datalists, order, file):
                 #then enter the data
                 csvwriter.writerow([entry, round(np.mean(data),2), round(np.std(data),2), min(data), statistics.median(data), max(data)])    
 
+"""
+takes a file and reads in the moves stored in it to create a board with those moves made
+returns the created board
+"""
+def board_from_file(file):
+    board = Board() #start a fresh board
+    with open(file, newline='') as movescsv:
+        csvreader = csv.reader(movescsv, delimiter=",")
+        for entry in csvreader:
+            #do a quick check that the row being read is an information row
+            if "Piece." in entry[0]:
+                #first unpack
+                piece = Piece[entry[0].split(".")[1]]
+                rotation = Rotation[entry[1].split(".")[1]]
+                flip = entry[2] == "True"
+                row = int(entry[3])
+                col = int(entry[4])
+                turn = int(entry[5])
+                board.add_tile(Tile(piece, rotation, flip), (row,col), turn)
+    return board
 
 if __name__ == "__main__":
     
@@ -65,25 +85,14 @@ if __name__ == "__main__":
             datalists, order = merge_statistics(runs)
             create_aggregate_csv(datalists, order, f"{RESULTS_FOLDER}/{player_name}/{csvfile}")
     elif sys.argv[1] == "genpic":
-        #if the argument is "genpic" then generate a picture out of the moves csv in the given file and
+        #if the argument is "genpic" then generate a picture out of the moves csv in the given folder and
         #store the picture in the same folder
         #the argument is the folder position relative to the results directory
         folder = "{0}/{1}".format(RESULTS_FOLDER, sys.argv[2])
-        board = Board() #start a fresh board
-        with open("{0}/{1}".format(folder, MOVES_CSV), newline='') as movescsv:
-            csvreader = csv.reader(movescsv, delimiter=",")
-            for entry in csvreader:
-                #do a quick check that the row being read is an information row
-                if "Piece." in entry[0]:
-                    #first unpack
-                    piece = Piece[entry[0].split(".")[1]]
-                    rotation = Rotation[entry[1].split(".")[1]]
-                    flip = entry[2] == "True"
-                    row = int(entry[3])
-                    col = int(entry[4])
-                    turn = int(entry[5])
-                    board.add_tile(Tile(piece, rotation, flip), (row,col), turn)
+        movesfile = "{0}/{1}".format(folder, MOVES_CSV)
+        board = board_from_file(movesfile)
         board.fancy_board_print(file="{0}/{1}".format(folder, PHOTO_FILENAME))
-                
+    elif sys.argv[1] == "turn":
+        pass
     else:
-        raise ValueError("Invalid argument supplied, must be one of\n\t'play', 'aggregate', 'genpic'")
+        raise ValueError("Invalid argument supplied, must be one of\n\t'play', 'aggregate', 'genpic', 'turn'")
