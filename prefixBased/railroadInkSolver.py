@@ -10,7 +10,6 @@ import shutil
 import sys
 import contextlib
 import time
-import os
 
 #adjust the results folder based on where this is being called
 #hardcode this to ensure that whenever files are copied to and from the cluster
@@ -87,6 +86,7 @@ class RailroadInkSolver:
     binary_set - set of variables to make binary
     gurobi_params - dictionary of gurobi parameters to set
     timeouts - array of timeouts, -1 at each index if there shouldn't be a timeout
+    linear - if true then solves the linear relaxation, else solves the MILP
     """
     def __init__(self, board, turn, dice_rolls, objective, specials=True,
                  col_gen=False,
@@ -98,7 +98,8 @@ class RailroadInkSolver:
                  binary_set=DEFAULT_BINARY_SET,
                  gurobi_params=DEFAULT_GUROBI_PARAMS,
                  branch_priorities=DEFAULT_PRIORITIES,
-                 timeouts=DEFAULT_TIMEOUTS):
+                 timeouts=DEFAULT_TIMEOUTS,
+                 linear=False):
         self._board = board
         self._turn = turn
         self._dice_rolls = dice_rolls
@@ -121,6 +122,7 @@ class RailroadInkSolver:
         self._gurobi_params = gurobi_params
         self._branch_priorities = branch_priorities
         self._timeouts = timeouts
+        self._linear = linear
         #check for if there is even a special to be played, don't add them to the model if there isn't
         if self._board.all_specials_used():
             self._specials = False
@@ -149,14 +151,13 @@ class RailroadInkSolver:
     """
     create and solve an IP that gives the solutions to the railroad ink problem
     folder - a folder to print all information to, this will include the log, the results csv and any pictures
-    linear - if True, runs an LP, if False runs the IP
     print_output - whether to print Gurobi output to stdout
     printD - a list of scenarios to print pictures for, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
     tune - if non-zero, will perform a tune with the given length of time instead of a normal search
     lazy_constraints - whether or not to include lazy constraints
     """
-    def solve(self, folder="last-run", linear=False, print_output=False, printD=[], seed=0, tune=0,
+    def solve(self, folder="last-run", print_output=False, printD=[], seed=0, tune=0,
               lazy_constraints=True):
 
         self._start_time = time.time()
@@ -171,7 +172,7 @@ class RailroadInkSolver:
         
         self._create_sets()
         
-        self._create_variables(linear)
+        self._create_variables()
         
         self._set_branch_priorities()
         
@@ -270,7 +271,6 @@ class RailroadInkSolver:
         #if we are using column generation, then generate all the possible moves
         if self._col_gen:
             self.A = self._board.all_possible_moves(self._dice_rolls[0][0].get_dice(), self._specials)
-            print(len(self.A))
 
 
     """
@@ -283,7 +283,7 @@ class RailroadInkSolver:
     create all the variables used in the Railroad Ink problem, if linear is True, then define the variables to
     form an LP else define them as integers
     """
-    def _create_variables(self, linear):
+    def _create_variables(self):
         #unload the class variables into local variables for ease
         m = self.m
         T = self.T
@@ -295,7 +295,7 @@ class RailroadInkSolver:
         O = self.O
         
         #if linear, override the binary set to be empty
-        if linear:
+        if self._linear:
             self._binary_set = set()
         
         #BASIC PLACEMENT VARIABLES
@@ -466,7 +466,6 @@ class RailroadInkSolver:
             self.only_play_if_col_played = {(t,s) :
                 m.addConstr(X[t,s,(0,)] == quicksum(B[a] for a in plays[t,s]))
                 for (t,s) in plays}
-            print(len(self.only_play_if_col_played))
             
     
         if self._specials:
@@ -1023,6 +1022,8 @@ class RailroadInkSolver:
             csv_writer.writerow(["gurobi time", self.get_gurobi_runtime()])
             csv_writer.writerow(["total time", self.get_total_runtime()])
             csv_writer.writerow(["result", self.get_result()])
+            if self._col_gen:
+                csv_writer.writerow(["columns", len(self.A)])
         
     #############################CALLBACK FUNCTIONS############################
         
@@ -1212,8 +1213,6 @@ class RailroadInkSolver:
         T = self.T
         X = self.X #retrieve the X variables
         
-        
-        
         #find the pieces that need to be played in this scenario and the corresponding tiles
         pieceCounts = self._dice_rolls[len(scenario)-1][scenario[-1]].get_dice()
         tilesToCheck = []
@@ -1241,11 +1240,6 @@ class RailroadInkSolver:
         if canPlaceMissingPiece:
             m.cbLazy(1 <= quicksum(1 - X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] > 0.9) +
                           quicksum(X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] < 0.1))
-            #m.cbLazy(1 <= quicksum(1 - X[t,s,scenario] for (t,s) in played_tiles) #we can move an already played tile
-            #                + quicksum(X[t,s,scenario] for piece in missing_pieces for t in Tile.get_variations(piece) 
-            #                        for s in I if self._board.get_piece_at(s) == Piece.BLANK) #play a missing piece
-            #                + (quicksum(X[t,s,scenario] for piece in SPECIAL_PIECES for t in Tile.get_variations(piece) for s in I) 
-            #                        if not self._board.all_specials_used() else 0)) #play a special piece
          
         #finally we also want to check for any loops for longest paths
         if self._longest_paths and self._path_loops == "lazy":
@@ -1295,8 +1289,10 @@ if __name__ == "__main__":
 #    s.solve(print_output=True, printD="all")
     
     board = Board()
-    dice_rolls = rulebook_dice_rolls()
-    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, col_gen=False, fake_connections=True)
+    #dice_rolls = rulebook_dice_rolls()
+    dice_rolls = [[DiceRoll({Piece.STRAIGHT_STATION : 1, Piece.RAILWAY_CORNER : 1, 
+                             Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1},1)]]
+    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, col_gen=True, fake_connections=True)
     s.solve(print_output=True, printD="all")
     
     #board = Board()

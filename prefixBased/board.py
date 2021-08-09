@@ -1256,7 +1256,8 @@ if __name__ == "__main__":
 #    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,5), 2)
     
     #board.fancy_board_print()
-    a = board.all_possible_moves({Piece.RAILWAY_T : 4}, include_specials=False)
+    a = board.all_possible_moves({Piece.STRAIGHT_STATION : 1, Piece.RAILWAY_CORNER : 1, 
+                             Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1}, include_specials=False)
     #print(a)
     print(len(a))
     
