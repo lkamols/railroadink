@@ -1162,15 +1162,19 @@ class for a dice roll, a dice roll has a dictionary of pieces and a probability
 """
 class DiceRoll:
     
-    def __init__(self, dice, probability):
+    def __init__(self, dice, probability, include_specials=True):
         self._dice = dice
         self._probability = probability
+        self._include_specials = include_specials
     
     def get_dice(self):
         return self._dice
     
     def get_probability(self):
         return self._probability
+    
+    def does_include_specials(self):
+        return self._include_specials
     
     """
     gets a list of the full distribution of dice rolls
@@ -1188,7 +1192,9 @@ class DiceRoll:
                         roll_counts[roll] = roll_counts.get(roll, 0) + 1
         #now we have all the roll counts and their occurrences
         num_rolls = len(BASIC_PIECES)**3 * len(JUNCTION_PIECES)
-        return [DiceRoll(Counter(roll), roll_counts[roll] / num_rolls)  for roll in roll_counts]
+        #sort these so that there is a determinstic ordering for comparing trials
+        ordered_rolls = sorted([roll for roll in roll_counts])
+        return [DiceRoll(Counter(roll), roll_counts[roll] / num_rolls)  for roll in ordered_rolls]
     
     def __repr__(self):
         return "({0}, {1})".format(self._dice, self._probability)

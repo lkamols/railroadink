@@ -150,7 +150,7 @@ class RailroadInkSolver:
     
     """
     create and solve an IP that gives the solutions to the railroad ink problem
-    folder - a folder to print all information to, this will include the log, the results csv and any pictures
+    folder - a folder to print all information to, this will include the log, the results csv and any pictures, None if no results should be saved
     print_output - whether to print Gurobi output to stdout
     printD - a list of scenarios to print pictures for, or "all" if all scenarios should be printed, default is to not print
     seed - the seed to use for gurobi
@@ -162,10 +162,10 @@ class RailroadInkSolver:
 
         self._start_time = time.time()
         
-        folder = "{0}/{1}".format(RESULTS_FOLDER, folder) #update the folder name
-            
-        #create an empty folder to store all the results in
-        create_empty_folder(folder)
+        if folder != None:
+            folder = "{0}/{1}".format(RESULTS_FOLDER, folder) #update the folder name  
+            #create an empty folder to store all the results in
+            create_empty_folder(folder)
         
         #create the model
         self.m = Model("Railroad Ink")
@@ -476,8 +476,10 @@ class RailroadInkSolver:
                     for p in SPECIAL_PIECES for d in D}
                 
             #play at most one special piece per turn (in every scenario)
+            #only allow these to be played if there is a special allowed for this dice roll
             self.one_special_per_turn = {c :
-                m.addConstr(quicksum(X[t,s,c] for s in S for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=1)
+                m.addConstr(quicksum(X[t,s,c] for s in S for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=
+                            (1 if self._dice_rolls[len(c) - 1][c[-1]].does_include_specials() else 0))
                 for c in C if c != tuple()}  
                 
             #play max 3 special pieces total, for every single set of full dice rolls
@@ -841,7 +843,8 @@ class RailroadInkSolver:
         #set up the timeout if it is needed
         if self._timeouts[self._turn - 1] != -1:
             self.m.setParam('TimeLimit', self._timeouts[self._turn - 1])
-        self.m.setParam('LogFile', folder + "/log.txt")
+        if folder != None:
+            self.m.setParam('LogFile', folder + "/log.txt")
 
     #############################OUTPUT######################################
     
@@ -849,16 +852,17 @@ class RailroadInkSolver:
     creates all output files
     """
     def _create_output(self, folder, printD):
-        #create images for any scenarios
-        self._print_scenarios(printD, folder)
-        #create the csv for points
-        self._make_points_csv(folder)
-        #create the csv for the moves being made
-        self._make_scenarios_csv(folder)
-        #create the csv for the settings
-        self._make_settings_csv(folder)
-        #create the csv with information about the run
-        self._make_info_csv(folder)
+        if folder != None:
+            #create images for any scenarios
+            self._print_scenarios(printD, folder)
+            #create the csv for points
+            self._make_points_csv(folder)
+            #create the csv for the moves being made
+            self._make_scenarios_csv(folder)
+            #create the csv for the settings
+            self._make_settings_csv(folder)
+            #create the csv with information about the run
+            self._make_info_csv(folder)
         
     
     """

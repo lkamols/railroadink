@@ -6,9 +6,13 @@ import os
 import csv
 import numpy as np
 import statistics
-from board import Board, Piece, Rotation, Tile
+import math
+from board import Board, Piece, Rotation, Tile, DiceRoll
 from railroadInkSolver import RESULTS_FOLDER
-from railroadInkPlayer import RailroadInkPlayer, INFO_CSV, SCORE_CSV, MOVES_CSV, PHOTO_FILENAME
+from railroadInkPlayer import RailroadInkPlayer, INFO_CSV, SCORE_CSV, MOVES_CSV, EVALUATE_CSV, PHOTO_FILENAME
+
+COMPARE_CSV = "compare.csv"
+
 
 """
 taking a list of files, read them as csvs and merge the results into a dictionary of all the contents of the files
@@ -99,7 +103,60 @@ if __name__ == "__main__":
         #if the argument is "turn" then do a single turn from the state given in boardfile
         #first load in the board
         player = RailroadInkPlayer(sys.argv[2], int(sys.argv[3]), sys.argv[4])
-        player.play_turn(print_pictures=False, print_output=False)
+        player.play_turn(print_pictures=False, print_output=True)
+    elif sys.argv[1] == "evaluate":
+        #use: evaluate player seed scenario
+        #does one step, then evaluates that move with the given player for all possible dice
+        #rolls on the next move
+        player = RailroadInkPlayer(sys.argv[2], int(sys.argv[3]), sys.argv[4])
+        player.evaluate_turn(print_pictures=False, print_output=True)
+    elif sys.argv[1] == "compare":
+        #use: compare scenario {players}
+        #compares all players for the given scenario and determines the likelihood of them winning
+        #every single seed
+        
+        #start by getting the path to the directory being compared
+        folder = f"{RESULTS_FOLDER}/{sys.argv[2]}"
+        if len(sys.argv) > 3:
+            players = sys.argv[3:]
+        else:
+            players = os.listdir(folder)
+        #use all of the seeds in the folder of the first player
+        seeds = os.listdir(f"{folder}/{players[0]}")
+        
+        #get all of the possible dice rolls for determining probabilities
+        dice_rolls = DiceRoll.get_full_distribution()
+        
+        #we will be writing the results to a csv
+        with open(f"{folder}/{COMPARE_CSV}", mode="w", newline='') as printcsv:
+            csvwriter = csv.writer(printcsv, delimiter=",")
+            csvwriter.writerow(["Seed"] + players)
+            #for each of the seeds/games, run through all the players and work out who wins
+            for seed in seeds:
+                scores = {}
+                #read each players scores for this seed and save them
+                for player in players:
+                    scores[player] = [] 
+                    with open(f"{folder}/{player}/{seed}/{EVALUATE_CSV}", newline='') as evalcsv:
+                        csvreader = csv.reader(evalcsv, delimiter=",")
+                        for line in csvreader:
+                            scores[player].append(line[1]) #the score in that scenario is the second entry
+                #now we need to calculate the win probabilities
+                
+                win_probs = {player : 0 for player in players} #start all at zero
+                for game_index in range(len(dice_rolls)):
+                    #get the winning score
+                    winning_score = max(float(scores[player][game_index]) for player in players)
+                    game_prob = dice_rolls[game_index].get_probability()
+                    for player in players:
+                        if math.isclose(float(scores[player][game_index]), winning_score):
+                            win_probs[player] += game_prob
+                #now print this to the collated csv
+                csvwriter.writerow([seed] + [win_probs[player] for player in players])
+                            
+                    
+            
+        
         
     else:
-        raise ValueError("Invalid argument supplied, must be one of\n\t'play', 'aggregate', 'genpic', 'turn'")
+        raise ValueError("Invalid argument supplied, must be one of\n\t'play', 'aggregate', 'genpic', 'turn', 'evaluate', 'compare'")
