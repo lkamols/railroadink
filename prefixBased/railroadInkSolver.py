@@ -284,7 +284,7 @@ class RailroadInkSolver:
         if var in {"L", "K", "M"} and self._old_constraints and not self._linear:
             return GRB.BINARY
         #return binary if in the given binary set
-        return GRB.BINARY if var in self._binary_set else GRB.CONTINUOUS
+        return GRB.BINARY if var in self._binary_set and not self._linear else GRB.CONTINUOUS
 
     """
     create all the variables used in the Railroad Ink problem, if linear is True, then define the variables to
@@ -300,10 +300,6 @@ class RailroadInkSolver:
         E = self.E
         I = self.I
         O = self.O
-        
-        #if linear, override the binary set to be empty
-        if self._linear:
-            self._binary_set = set()
         
         #BASIC PLACEMENT VARIABLES
         
@@ -380,7 +376,7 @@ class RailroadInkSolver:
                 self.FF = {(s,e,d) : m.addVar(ub=12) 
                         for s in I for e in E for d in D} 
                 self.G = {(s,d) : m.addVar(ub=12) for s in O for d in D}   
-                self.H = {(s,d) : m.addVar(vtype=GRB.BINARY) for s in O for d in D} 
+                self.H = {(s,d) : m.addVar(vtype=(GRB.CONTINUOUS if self._linear else GRB.BINARY)) for s in O for d in D} 
                 self.J = {d : m.addVar(vtype=self._binary('J'), ub=1) for d in D}
         
         #LONGEST RAILWAY/HIGHWAY VARIABLES
@@ -1349,17 +1345,17 @@ def create_empty_folder(folder):
     
         
 if __name__ == "__main__":
-    board = rulebook_game()
-    dice_rolls = rulebook_dice_rolls()
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", old_constraints=True)
-    s.solve(print_output=True, printD="all")
-    
-    #board = Board()
+    #board = rulebook_game()
     #dice_rolls = rulebook_dice_rolls()
+    #s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", old_constraints=True, linear=True)
+    #s.solve(print_output=True, printD="all")
+    
+    board = Board()
+    dice_rolls = rulebook_dice_rolls()
     #dice_rolls = [[DiceRoll({Piece.STRAIGHT_STATION : 1, Piece.RAILWAY_CORNER : 1, 
     #                         Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1},1)]]
-    #s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", specials=False, col_gen=True, fake_connections=True)
-    #s.solve(print_output=True, printD="all")
+    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", linear=True)
+    s.solve(print_output=True, printD="all")
     
     #board = Board()
 #    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1)],
