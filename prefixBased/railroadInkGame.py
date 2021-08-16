@@ -38,14 +38,14 @@ taking the result of the merge_statistics function and a file to create a csv at
 creates a csv with the aggregate information (mean, stddev, min, median, max)
 """
 def create_aggregate_csv(datalists, order, file):
-        #now write to a csv all the results
-        with open(file, mode="w", newline='') as printcsv:
-            csvwriter = csv.writer(printcsv, delimiter=",")
-            csvwriter.writerow(["", "Mean", "StdDev", "Min", "Median", "Max"])
-            for entry in order:
-                data = datalists[entry] #get the list of data associated with this entry
-                #then enter the data
-                csvwriter.writerow([entry, round(np.mean(data),2), round(np.std(data),2), min(data), statistics.median(data), max(data)])    
+    #now write to a csv all the results
+    with open(file, mode="w", newline='') as printcsv:
+        csvwriter = csv.writer(printcsv, delimiter=",")
+        csvwriter.writerow(["", "Mean", "StdDev", "Min", "Median", "Max"])
+        for entry in order:
+            data = datalists[entry] #get the list of data associated with this entry
+            #then enter the data
+            csvwriter.writerow([entry, round(np.mean(data),2), round(np.std(data),2), min(data), statistics.median(data), max(data)])    
 
 """
 takes a file and reads in the moves stored in it to create a board with those moves made
@@ -123,6 +123,7 @@ if __name__ == "__main__":
             players = os.listdir(folder)
         #use all of the seeds in the folder of the first player
         seeds = os.listdir(f"{folder}/{players[0]}")
+        seeds.sort() #put these in order
         
         #get all of the possible dice rolls for determining probabilities
         dice_rolls = DiceRoll.get_full_distribution()
@@ -137,26 +138,29 @@ if __name__ == "__main__":
                 #read each players scores for this seed and save them
                 for player in players:
                     scores[player] = [] 
-                    with open(f"{folder}/{player}/{seed}/{EVALUATE_CSV}", newline='') as evalcsv:
-                        csvreader = csv.reader(evalcsv, delimiter=",")
-                        for line in csvreader:
-                            scores[player].append(line[1]) #the score in that scenario is the second entry
+                    evalfile = f"{folder}/{player}/{seed}/{EVALUATE_CSV}"
+                    #determine if the file exists
+                    if os.path.isfile(evalfile):
+                        with open(evalfile, newline='') as evalcsv:
+                            csvreader = csv.reader(evalcsv, delimiter=",")
+                            for line in csvreader:
+                                scores[player].append(float(line[1])) #the score in that scenario is the second entry
+                    else:
+                        #if the file doesn't exist, just make -1 values as flags
+                        scores[player] = [-1]*len(dice_rolls)
                 #now we need to calculate the win probabilities
                 
                 win_probs = {player : 0 for player in players} #start all at zero
                 for game_index in range(len(dice_rolls)):
                     #get the winning score
-                    winning_score = max(float(scores[player][game_index]) for player in players)
+                    winning_score = max(scores[player][game_index] for player in players)
                     game_prob = dice_rolls[game_index].get_probability()
                     for player in players:
-                        if math.isclose(float(scores[player][game_index]), winning_score):
+                        if math.isclose(scores[player][game_index], winning_score):
                             win_probs[player] += game_prob
+                        elif scores[player][game_index] == -1:
+                            win_probs[player] = "MISSING"
                 #now print this to the collated csv
                 csvwriter.writerow([seed] + [win_probs[player] for player in players])
-                            
-                    
-            
-        
-        
     else:
         raise ValueError("Invalid argument supplied, must be one of\n\t'play', 'aggregate', 'genpic', 'turn', 'evaluate', 'compare'")
