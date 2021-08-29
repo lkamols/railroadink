@@ -238,6 +238,16 @@ class RailroadInkSolver:
             return self.m.objval
         else:
             return 0 #the objective value isn't determined when multiple solutions are returned
+        
+    """
+    returns a list of solutions if solution_count was set > 0
+    returns a list of (tile, square) lists
+    """
+    def get_multiple_solutions(self):
+        solns = []
+        for soln_id in self._solutions:
+            solns.append(self._solution_moves[soln_id])
+        return solns
     
     """
     get a list of the actual moves that were made, returns a dictionary of the moves made
@@ -253,7 +263,7 @@ class RailroadInkSolver:
                 for s in self.I:
                     for t in self.T:
                         if self.X[t,s,c].x > 0.9:
-                            moves.append((s,t))
+                            moves.append((t,s))
                 all_moves[c] = moves
         return all_moves
     
@@ -1106,8 +1116,11 @@ class RailroadInkSolver:
             csv_writer = csv.writer(csv_file, delimiter=",")
             csv_writer.writerow(["turn", self._turn])
             csv_writer.writerow(["objective", self._objective])
-            csv_writer.writerow(["isolated_pieces", self._isolated_pieces])
             csv_writer.writerow(["specials", self._specials])
+            csv_writer.writerow(["col_gen", self._col_gen])
+            csv_writer.writerow(["intermediate_connections", self._intermediate_connections])
+            csv_writer.writerow(["isolated_pieces", self._isolated_pieces])
+            csv_writer.writerow(["path_loops", self._path_loops])
             csv_writer.writerow(["connecting_exits", self._connecting_exits])
             csv_writer.writerow(["longest_paths", self._longest_paths])
             csv_writer.writerow(["errors", self._errors])
@@ -1118,6 +1131,10 @@ class RailroadInkSolver:
             csv_writer.writerow(["fake_connections_cost"] + self._fake_connections_cost)
             csv_writer.writerow(["fake_connections_max"] + self._fake_connections_max)
             csv_writer.writerow(["internal_sink_scores"] + self._internal_sink_scores)
+            csv_writer.writerow(["old_constraints", self._old_constraints])
+            csv_writer.writerow(["linear", self._linear])
+            csv_writer.writerow(["linear_tree", self._linear_tree])
+            csv_writer.writerow(["solution_count", self._solution_count])
             csv_writer.writerow(["binary_set"] + list(self._binary_set))
             csv_writer.writerow(["timeouts"] + self._timeouts)
             csv_writer.writerow(["Gurobi Params"])
@@ -1203,13 +1220,7 @@ class RailroadInkSolver:
         #to force infeasibility if anything lower than these solutions is reached
         if len(self._solutions) == self._solution_count:
             model.cbLazy(Beta >= self._solutions[-1][0])
-            print("cut at", self._solutions[-1][0])
         self._solution_number += 1 #increment the secondary counter 
-        print(soln_id, played_tiles)
-        print(self._solutions)
-            
-            
-        
          
     """
     find the pieces that are missing given the played tiles and the expected count for pieces

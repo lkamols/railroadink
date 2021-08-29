@@ -3,6 +3,8 @@ from board import Board, Tile, Piece, Rotation, DiceRoll, BASIC_PIECES, JUNCTION
 import random
 import csv
 import json
+import math
+import numpy as np
 
 TURNS = 7
 PHOTO_FILENAME = "solution.png"
@@ -152,67 +154,113 @@ class RailroadInkPlayer:
         return moves, latest_turn + 1 #the last turn + 1 is the current turn
     
     """
-    plays a single turn of Railroad Ink with the given player, board from the given scenario/board file
-    and moves generated with given seed
+    if multiple solutions were found, compare them to find which is the best
     """
-    def play_turn(self, print_pictures=False, print_output=False):
-        #start by determining the moves with the given scenario and what turn we are up to
-        all_moves, turn = self._get_starting_moves()
-        #then load these into a board
-        board = Board()
-        for move in all_moves:
-            board.add_tile(move[0], move[1], move[2])
-        #then generate the roll 
-        roll = generate_game_roll()
-        #determine how the player is supposed to make decisions at this turn by updating the kwargs
-        #at each turn up until now
-        for i in range(1, turn + 1):
-            self._update_kwargs_dict(i)
+    def _compare_moves(self, board, s, turn, print_output):
+        #now we need to evaluate these different solutions
+        solns = s.get_multiple_solutions()
+        solution_count = len(solns)
+        move_results = [] #track the results of all of the different moves
+        for soln in solns:
+            #a solution is just a list of moves, need to update the board for each one
+            for tile, square in soln:
+                board.add_tile(tile, square, turn)
+            #now using the new board, evaluate it by running all 162 scenarios
+            move_results.append(self._evaluate_scenario(board, turn, print_output))
+            #clear the board
+            for tile, square in soln:
+                board.remove_tile(square)
+        win_probs = [0] * solution_count #all the candidates start with a win prob of 0
+        #now go through each of the games and determine the winner and alter the win probabilities
+        for game_index in range(len(self._all_rolls)):
+            winning_score = max(move_results[move][game_index] for move in range(solution_count))
+            for move in range(solution_count):
+                if math.isclose(move_results[move][game_index], winning_score):
+                    win_probs[move] += self._all_rolls[game_index].get_probability()
+        #determine the move which wins most often
+        best_move = np.argmax(win_probs)
+        self._evaluate_csv(move_results[best_move])
+        return solns[best_move] #return the moves made in the best scenario
+        
+    
+    """
+    solves for the move to make given a board, updates the moves_made list
+    board - board before this turn
+    moves_made - moves made up to this turn
+    turn_dice - the dice rolled for this turn
+    turn - the number of this turn
+    """
+    def _solve_turn(self, board, moves_made, turn_dice, turn, folder, print_output):
         #determine the dice_rolls to use
-        dice_rolls = self._get_dice_rolls(roll)
+        dice_rolls = self._get_dice_rolls(turn_dice)
         
         #strip the 'rolls' information from the kwargs to pass them along
-        
         kwargs = dict(self._kwargs)
         if "rolls" in kwargs:
             kwargs.pop("rolls")
         
         #run the game
         s = RailroadInkSolver(board, turn, dice_rolls, **kwargs)
-        s.solve(folder=self._call_folder, print_output=print_output)
+        s.solve(folder=folder, print_output=print_output)
         
-        #unpack the moves that were made and add them to all_moves
-        moves = s.get_moves_made()[(0,)]
-        for square, tile in moves:
+        #now check for if multiple solutions were generated and if so evaluate them
+        if self._kwargs.get("solution_count", 1) > 1:
+            moves = self._compare_moves(board, s, turn, print_output)
+        else:    
+            #unpack the moves that were made and add them to moves_made
+            moves = s.get_moves_made()[(0,)]
+            
+        #add the selected moves
+        for tile, square in moves:
             board.add_tile(tile, square, turn)
-            all_moves.append((tile, square, turn))
+            moves_made.append((tile, square, turn))
+        return s
+    
+    """
+    plays a single turn of Railroad Ink with the given player, board from the given scenario/board file
+    and moves generated with given seed
+    """
+    def play_turn(self, print_pictures=False, print_output=False):
+        #start by determining the moves with the given scenario and what turn we are up to
+        moves_made, turn = self._get_starting_moves()
+        #then load these into a board
+        board = Board()
+        for move in moves_made:
+            board.add_tile(move[0], move[1], move[2])
+        #then generate the roll 
+        turn_dice = generate_game_roll()
+        #determine how the player is supposed to make decisions at this turn by updating the kwargs
+        #at each turn up until now
+        for i in range(1, turn + 1):
+            self._update_kwargs_dict(i)
+       
+        #actually solve the turn
+        self._solve_turn(board, moves_made, turn_dice, turn, self._call_folder, print_output)         
             
         if print_pictures:
             board.fancy_board_print(file="{0}/{1}".format(self._folder, PHOTO_FILENAME))     
             
         #make a csv for the moves made
-        self._make_moves_csv(all_moves)
+        self._make_moves_csv(moves_made)
         
         #save the board to the state, just for use in the evaluate_turn function
         self._board = board
         self._turn = turn
-        
+       
     """
-    take a turn, then evaluate it with the 162 different possible dice rolls, using the next
-    turn of the given player
-    """
-    def evaluate_turn(self, print_pictures=False, print_output=False):
-        self.play_turn() #first play the turn
-        turn = self._turn + 1 #update the turn we are now considering
+    given a completed turn, determine the scores for each of the 162 possible dice rolls for the next turn
+    """    
+    def _evaluate_scenario(self, board, turn_played, print_output):
+        turn = turn_played + 1
         self._update_kwargs_dict(turn) #update the player decision making
         
         #then generate all the possible different rolls that could occur for the turn after
-        rolls = DiceRoll.get_full_distribution()
-        
-        evaluateFile = "{0}/{1}".format(self._folder, EVALUATE_CSV)
+        #ensure this is only done once to avoid a lot of recalculation
+        if not hasattr(self, "_all_rolls"):
+            self._all_rolls = DiceRoll.get_full_distribution()
         
         results = []
-        for dice_roll in rolls:
+        for dice_roll in self._all_rolls:
             #determine the scenario tree for this solver
             dice_rolls  = self._get_dice_rolls(dice_roll.get_dice())
             
@@ -221,14 +269,32 @@ class RailroadInkPlayer:
             if "rolls" in kwargs:
                 kwargs.pop("rolls")
                 
-            s = RailroadInkSolver(self._board, turn, dice_rolls, **kwargs)
+            s = RailroadInkSolver(board, turn, dice_rolls, **kwargs)
             s.solve(folder=None, print_output=print_output)
             results.append(round(s.get_result(),2))
-                
+        return results
+
+    """
+    create a csv with the scores of all of the different scenarios for the given results
+    """
+    def _evaluate_csv(self, results):   
+        evaluateFile = "{0}/{1}".format(self._folder, EVALUATE_CSV)
         with open(evaluateFile, mode="w", newline="") as csv_file:
-            for i in range(len(rolls)):
+            for i in range(len(self._all_rolls)):
                 csv_writer = csv.writer(csv_file, delimiter=",")
                 csv_writer.writerow([i, results[i]])
+        
+    """
+    take a turn, then evaluate it with the 162 different possible dice rolls, using the next
+    turn of the given player
+    """
+    def evaluate_turn(self, print_pictures=False, print_output=False):
+        self.play_turn(print_pictures, print_output) #first play the turn
+        if self._kwargs.get("solution_count", 1) > 1:
+            return #evaluation was already done
+        results = self._evaluate_scenario(self._board, self._turn, print_output)
+        self._evaluate_csv(results)
+        
        
     """
     play a full game of Railroad Ink with the given player and dice rolls (from the seed)
@@ -237,13 +303,13 @@ class RailroadInkPlayer:
         #start by creating an empty board
         board = Board()
         #initialise the game dice rolls using the seed
-        self._rolls = generate_game_rolls(self._game_seed)
+        rolls = generate_game_rolls(self._game_seed)
         
         #ensure there is an empty folder
         create_empty_folder(self._folder)
         
         times = [] #track the times of each of the runs
-        all_moves = [] #track all the moves made so that they can be put into a csv at the end
+        moves_made = [] #track all the moves made so that they can be put into a csv at the end
         
         #go through every turn
         for turn in range(1,TURNS+1):
@@ -252,23 +318,10 @@ class RailroadInkPlayer:
             turn_folder = "{0}/Turn-{1}".format(self._call_folder, turn)
             
             self._update_kwargs_dict(turn)
-            dice_rolls = self._get_dice_rolls(self._rolls[turn-1])
             
-            #strip the 'rolls' information from the kwargs to pass them along
-            kwargs = dict(self._kwargs)
-            if "rolls" in kwargs:
-                kwargs.pop("rolls")
+            #solve the turn
+            s = self._solve_turn(board, moves_made, rolls[turn-1], turn, turn_folder, print_output)
             
-            s = RailroadInkSolver(board, turn, dice_rolls, **kwargs)
-            
-            s.solve(folder=turn_folder, print_output=print_output)
-            #now we need to get out the information from this
-            #we only care about the moves made on the first turn, sequence (0,)
-            moves = s.get_moves_made()[(0,)]
-            #now add all the moves made to the board
-            for square, tile in moves:
-                board.add_tile(tile, square, turn)
-                all_moves += [(tile, square, turn)]
             #update the list of solve times
             times.append(s.get_gurobi_runtime())
         
@@ -276,26 +329,16 @@ class RailroadInkPlayer:
             board.fancy_board_print(file="{0}/{1}".format(self._folder, PHOTO_FILENAME))
                 
         #now make a CSV containing the scoring information about the run and get the calculated score
-        score = self._make_score_csv(board)
+        self._make_score_csv(board)
         
         self._make_info_csv(times)
-        self._make_moves_csv(all_moves)
-            
-        #do a double check that the result of the MILP and the board calculation are the same
-        #these are not necessarily going to be the same depending on the solver, so raising an error
-        #isn't really appropriate, and if there are batch results then any printing won't do much
-        #so create a file 
-        if abs(score - s.get_result()) > 0.1:
-            errorPath = "{0}/{1}".format(self._folder, ERROR_FILE)
-            with open(errorPath, 'w') as errorFile:
-                errorFile.write("MILP: {0}\nBoard: {1}".format(s.get_result(), score))
+        self._make_moves_csv(moves_made)
             
         #return the final score
         return s.get_result()
     
     """
     determines the dice rolls which will be used to call the solver
-    TO DO expand this to work with future moves as well, not just the current move
     """
     def _get_dice_rolls(self, roll):
         if "rolls" not in self._kwargs:
