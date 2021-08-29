@@ -34,9 +34,9 @@ DEFAULT_INTERNAL_SINK_SCORES = [3,3,2.5,2,1.5,1,0]
 #the variables that must be binary for the model to be correct
 MINIMAL_BINARY_SET = {'X', 'J'}
 #the default choices
-DEFAULT_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'J', 'G', 'Q', 'K', 'M', 'B'}
+DEFAULT_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'J', 'G', 'Q', 'K', 'M', 'B', 'VV', 'YY'}
 #all possible binaries values
-MAXIMAL_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'F', 'FF', 'J', 'G', 'Q', 'K', 'L', 'M', 'B'}
+MAXIMAL_BINARY_SET = {'X', 'Y', 'V', 'W', 'Z', 'F', 'FF', 'J', 'G', 'Q', 'K', 'L', 'M', 'B', 'VV', 'YY'}
 
 DEFAULT_GUROBI_PARAMS = {'Heuristics': 0.001,
                          'Cuts': 1,
@@ -44,7 +44,7 @@ DEFAULT_GUROBI_PARAMS = {'Heuristics': 0.001,
 
 DEFAULT_PRIORITIES = {"Y": 10}
 
-DEFAULT_TIMEOUTS = [-1, -1, -1, -1, -1, -1, -1]
+DEFAULT_TIMEOUTS = [-1, -1, -1, -1, -1, -1, -1] #measured in seconds (-1 for no timeout)
 
 """
 returns a list of all the prefixes of the supplied tuple
@@ -69,6 +69,7 @@ class RailroadInkSolver:
             "expected-score"
     specials - whether or not to consider special moves in the construction
     col_gen - whether to generate all possible moves in advance with a priori column generation and use these
+    intermediate_connections - whether to introduce variables for intermediate connections
     isolated_pieces - how to handle isolated pieces, options are "lazy" for using lazy constraints or "relief"
             for using a flow problem
     path_loops - how to handle path loops, options are "lazy" for using lazy constraints or "relief" for using
@@ -86,11 +87,14 @@ class RailroadInkSolver:
     old_constraints - if True, uses older versions of constraints that are not as tight
     binary_set - set of variables to make binary
     gurobi_params - dictionary of gurobi parameters to set
-    timeouts - array of timeouts, -1 at each index if there shouldn't be a timeout
-    linear - if true then solves the linear relaxation, else solves the MILP
+    timeouts - array of timeouts measured in seconds, -1 at each index if there shouldn't be a timeout
+    linear - if True then solves the linear relaxation, else solves the MILP
+    linear_tree - if True then treats the scenario tree as a linear problem and only the first move as integer
+    solution_count - determines how many solutions to produce. If 1 then does a general solve, if >1 then
+            creates a list of that many best solutions found. Requires only 1 scenario on the next turn
     """
     def __init__(self, board, turn, dice_rolls, objective, specials=True,
-                 col_gen=False,
+                 col_gen=False, intermediate_connections=False,
                  isolated_pieces="lazy", path_loops="relief",
                  connecting_exits=True, longest_paths=True, errors=True,
                  open_ends=False, open_end_points=DEFAULT_OPEN_ENDS_POINTS,
@@ -101,13 +105,14 @@ class RailroadInkSolver:
                  gurobi_params=DEFAULT_GUROBI_PARAMS,
                  branch_priorities=DEFAULT_PRIORITIES,
                  timeouts=DEFAULT_TIMEOUTS,
-                 linear=False):
+                 linear=False, linear_tree=False, solution_count=1):
         self._board = board
         self._turn = turn
         self._dice_rolls = dice_rolls
         self._objective = objective
         self._specials = specials
         self._col_gen = col_gen
+        self._intermediate_connections = intermediate_connections
         self._isolated_pieces = isolated_pieces
         self._path_loops = path_loops
         self._connecting_exits = connecting_exits
@@ -126,6 +131,8 @@ class RailroadInkSolver:
         self._branch_priorities = branch_priorities
         self._timeouts = timeouts
         self._linear = linear
+        self._linear_tree = linear_tree
+        self._solution_count = solution_count
         #check for if there is even a special to be played, don't add them to the model if there isn't
         if self._board.all_specials_used():
             self._specials = False
@@ -169,6 +176,10 @@ class RailroadInkSolver:
             folder = "{0}/{1}".format(RESULTS_FOLDER, folder) #update the folder name  
             #create an empty folder to store all the results in
             create_empty_folder(folder)
+            
+        #init the multi solution framework if needed
+        if self._solution_count > 1:
+            self._init_multi_solution()
         
         #create the model
         self.m = Model("Railroad Ink")
@@ -223,7 +234,10 @@ class RailroadInkSolver:
     get the result of the optimisation
     """
     def get_result(self):
-        return self.m.objval
+        if self._solution_count == 1:
+            return self.m.objval
+        else:
+            return 0 #the objective value isn't determined when multiple solutions are returned
     
     """
     get a list of the actual moves that were made, returns a dictionary of the moves made
@@ -279,16 +293,19 @@ class RailroadInkSolver:
     """
     determine whether or not a given variable should be binary or continuous given the binary set
     """
-    def _binary(self, var):
+    def _binary(self, var, scenario=None):
         #override these if using old constraints
-        if var in {"L", "K", "M"} and self._old_constraints and not self._linear:
+        if self._old_constraints and var in {"L", "K", "M"} and not self._linear:
             return GRB.BINARY
+        #override these if doing the linear_tree version
+        if self._linear_tree:
+            #the only binary constraints in the problem are the first turn movements
+            return GRB.BINARY if var == "X" and scenario == (0,) else GRB.CONTINUOUS
         #return binary if in the given binary set
         return GRB.BINARY if var in self._binary_set and not self._linear else GRB.CONTINUOUS
 
     """
-    create all the variables used in the Railroad Ink problem, if linear is True, then define the variables to
-    form an LP else define them as integers
+    create all the variables used in the Railroad Ink problem
     """
     def _create_variables(self):
         #unload the class variables into local variables for ease
@@ -307,7 +324,7 @@ class RailroadInkSolver:
         #x variables exist for every step of every scenario, which turn is defined by the length
         #of the tuple c, e.g if the tuple is () they are default placements, (1), they are first (since started)
         #move placements
-        self.X = {(t,s,c) : m.addVar(vtype=self._binary('X'), ub=1) for t in T for s in S for c in C}
+        self.X = {(t,s,c) : m.addVar(vtype=self._binary('X', c), ub=1) for t in T for s in S for c in C}
             
         #y variables for whether there is a link between adjacent squares with edge type e with dice rolls d
         #these variables are only calculated at the end of the scenarios, not during
@@ -320,10 +337,21 @@ class RailroadInkSolver:
                         self.Y[s,ss,e,d] = m.addVar(vtype=self._binary('Y'), ub=1)
                         #use the same variable in both directions
                         self.Y[ss,s,e,d] = self.Y[s,ss,e,d]
-        
+
         #V is for whether there is a connection on each side  
         self.V = {(s,ss,e,d) : m.addVar(vtype=self._binary('V'), ub=1) 
                 for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+        
+        if self._intermediate_connections:
+            #y' and v' variables are connection variables for the first placement
+            self.YY = {}
+            for s in S:
+                for e in E:
+                    for ss in self._board.adjacents(s, forward=True):
+                        self.YY[s,ss,e] = m.addVar(vtype=self._binary('YY'), ub=1)
+                        self.YY[ss,s,e] = self.YY[s,ss,e]
+            self.VV = {(s,ss,e) : m.addVar(vtype=self._binary('VV'), ub=1)
+                    for s in S for ss in self._board.adjacents(s) for e in E}
         
         #b variables are for whether any of the generated columns are set
         if self._col_gen:
@@ -407,7 +435,9 @@ class RailroadInkSolver:
             
         #SCORING VARIABLES
         #the score for every final scenario
-        self.Alpha = {d : m.addVar() for d in D}     
+        self.Alpha = {d : m.addVar() for d in D}   
+        #the objective value
+        self.Beta = m.addVar()
             
     """
     adjust the branch priorities according to the branch priority dictionary
@@ -540,6 +570,27 @@ class RailroadInkSolver:
                 self.connections = {(s,ss,e,d) :
                     m.addConstr(Y[s,ss,e,d] <= V[s,ss,e,d])
                     for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+                    
+        #add some extra constraints for the intermediate connections if we are using them
+        if self._intermediate_connections:
+            VV = self.VV
+            YY = self.YY
+            
+            #determine the v' values, the same constraint just for d = (0,)
+            self.vv_values = {(s,ss,e) :
+                m.addConstr(VV[s,ss,e] == quicksum(X[t,s,c] for c in prefixes((0,)) for t in T if t.get_edge_type_on_side(side) == e))
+            for s in S for ss,side in self._board.adjacents_with_sides(s) for e in E}
+                
+            #determine the y' values given the v' values
+            self.yy_connections = {(s,ss,e) :
+                m.addConstr(YY[s,ss,e] <= VV[s,ss,e])
+                for s in S for ss in self._board.adjacents(s) for e in E}
+                
+            #bound all of the y values using the y' values
+            self.yy_bounds = {(s,ss,e,d) :
+                m.addConstr(Y[s,ss,e,d] >= YY[s,ss,e])
+                for s in S for ss in self._board.adjacents(s) for e in E for d in D}
+            
             
         #constraints for clashes on edges joining squares horizontally, preventing railways and highways being connected
         #this needs to hold across every final scenario, only consider the final scenarios as the earlier ones are
@@ -827,7 +878,7 @@ class RailroadInkSolver:
         #calculate the score for each full scenario, use a <= because the optimisation will force equality where important
         if not self._old_constraints:
             self.scoring = {d :
-                m.addConstr(Alpha[d] <= quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
+                m.addConstr(Alpha[d] == quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
                                       + (4 * quicksum(G[s,o,d] for s in O for o in O if s != o) + J[d] if self._connecting_exits else 0) #connecting exits points
                                       + (quicksum(M[s,e,d] for s in I for e in E) if self._longest_paths else 0) #longest path points
                                       - (quicksum(X[t,s,c] * t.loose_ends(s) for t in T for s in I for c in prefixes(d)) #subtraction for the number of loose ends (start of penalty calculation)
@@ -838,7 +889,7 @@ class RailroadInkSolver:
         else:
             H = self.H
             self.old_scoring = {d :
-                m.addConstr(Alpha[d] <= quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
+                m.addConstr(Alpha[d] == quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
                                       + (48 - 4 * quicksum(H[s,d] for s in O) + J[d]) #connecting exits points
                                       + (quicksum(M[s,e,d] for s in I for e in E) if self._longest_paths else 0) #longest path points
                                       - (quicksum(X[t,s,c] * t.loose_ends(s) for t in T for s in I for c in prefixes(d)) #subtraction for the number of loose ends (start of penalty calculation)
@@ -859,18 +910,20 @@ class RailroadInkSolver:
         S = self.S
         E = self.E
         Alpha = self.Alpha
+        Beta = self.Beta
         
         if self._objective == "expected-score":
             #m.setObjective(quicksum(Alpha[d] * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
-            #score regularly but give some extra points for any open ends according to the scoring array
-            m.setObjective(quicksum((Alpha[d] 
+            #scores regularly but adds terms for if objective modifications were made3
+            m.addConstr(Beta == quicksum((Alpha[d] 
                                     + (quicksum(self.Z[s,ss,d] for s in I for ss in self._board.adjacents(s, internal=True)) * self._open_end_points[self._end_turn_index] 
                                              if self._open_ends else 0)
                                     + (quicksum(self.Q[s,ss,o,e,d] for s in S for ss in self._board.adjacents(s) for o in O for e in E) * self._internal_sink_scores[self._end_turn_index]
                                             if self._internal_sinks else 0)
                                     - (quicksum(self.W[s,ss,e,d] for s in S for ss in self._board.adjacents(s) for e in E) * self._fake_connections_cost[self._end_turn_index]
                                              if self._fake_connections else 0)) 
-                                    * self._scenario_probability(d) for d in D), GRB.MAXIMIZE)
+                                    * self._scenario_probability(d) for d in D))
+            m.setObjective(Beta, GRB.MAXIMIZE)
        
     """
     get the probability of a specific scenario, d
@@ -907,12 +960,13 @@ class RailroadInkSolver:
     """
     def _create_output(self, folder, printD):
         if folder != None:
-            #create images for any scenarios
-            self._print_scenarios(printD, folder)
-            #create the csv for points
-            self._make_points_csv(folder)
-            #create the csv for the moves being made
-            self._make_scenarios_csv(folder)
+            if self._solution_count == 1:
+                #create images for any scenarios
+                self._print_scenarios(printD, folder)
+                #create the csv for points
+                self._make_points_csv(folder)
+                #create the csv for the moves being made
+                self._make_scenarios_csv(folder)
             #create the csv for the settings
             self._make_settings_csv(folder)
             #create the csv with information about the run
@@ -1084,11 +1138,20 @@ class RailroadInkSolver:
             csv_writer.writerow(["gurobi time", self.get_gurobi_runtime()])
             csv_writer.writerow(["total time", self.get_total_runtime()])
             csv_writer.writerow(["result", self.get_result()])
+            csv_writer.writerow(["status", GRB.OPTIMAL])
             if self._col_gen:
                 csv_writer.writerow(["columns", len(self.A)])
         
     #############################CALLBACK FUNCTIONS############################
-        
+      
+    """
+    initialise some variables used for tracking multiple solutions
+    """
+    def _init_multi_solution(self):
+        self._solutions = [] #track the top few (obj,soln_no) pairs
+        self._solution_number = 0 #counter to differentiate solns with same objective
+        self._solution_moves = {} #maps solution results to their moves
+    
     """
     The callback used in the Railroad Ink solver
     """    
@@ -1100,10 +1163,54 @@ class RailroadInkSolver:
                 LV = {k : v for (k,v) in zip(self.L.keys(), model.cbGetSolution(list(self.L.values())))}
             else:
                 LV = {} #won't be needed at all
+                
+            #set a flag for if any lazy constraints were added
+            self._lazy_constraints_added = False
+                
             #run the lazy checks for every first dice roll considered
             for first_dice_roll in range(len(self._dice_rolls[0])):
                 self._lazy_checks((first_dice_roll,), XV, LV)
+                
+            if not self._lazy_constraints_added and self._solution_count > 1:
+                self._track_multiple_solutions(model, XV)
+   
+    """
+    handles the storage of multiple solution values according to the input solution_count variable
+    Adds a new solution to the list of stored solutions and adds lazy constraints to force
+    infeasibility under the threshold of multiple solutions
+    """
+    def _track_multiple_solutions(self, model, XV):
+        X = self.X
+        Beta = self.Beta
+        #first find the information about this solution, it's objective and the moves
+        objective = model.cbGet(GRB.Callback.MIPSOL_OBJ)
+        played_tiles, _ = self._get_pieces_played_in_scenario(XV, (0,)) 
+        
+        #create a tuple used to identify this solution and store the solution
+        soln_id = (objective, self._solution_number)
+        self._solution_moves[soln_id] = played_tiles 
+        
+        #add a constraint to rule out this solution
+        model.cbLazy(quicksum(X[t,s,(0,)] for (t,s) in played_tiles) <= len(played_tiles) - 1)
+        
+        #add this soln to the solution list
+        self._solutions.append(soln_id)
+        #if there are too many solutions now, remove one
+        if len(self._solutions) > self._solution_count:
+            self._solutions.sort(reverse=True)
+            self._solutions.pop()
+        #if there are the correct number of solutions, add a lower bound to the objective value
+        #to force infeasibility if anything lower than these solutions is reached
+        if len(self._solutions) == self._solution_count:
+            model.cbLazy(Beta >= self._solutions[-1][0])
+            print("cut at", self._solutions[-1][0])
+        self._solution_number += 1 #increment the secondary counter 
+        print(soln_id, played_tiles)
+        print(self._solutions)
             
+            
+        
+         
     """
     find the pieces that are missing given the played tiles and the expected count for pieces
     """
@@ -1189,6 +1296,7 @@ class RailroadInkSolver:
                                     #add a lazy constraint to say that this path cannot be entirely on
                                     m.cbLazy(((len(squares)-2)/(len(squares)-1))*quicksum(M[squares[i],e,d] for i in range(len(squares)-1)) >= 
                                             quicksum(L[squares[i],squares[i+1],e,d] for i in range(len(squares)-1)))
+                                    self._lazy_constraints_added = True
                                     break #leave the while loop, we have found a loop
                                 #consider all of the directions we could be travelling, it can only be one of these
                                 for (dr,dc) in [(0,1),(1,0),(0,-1),(-1,0)]:
@@ -1253,6 +1361,7 @@ class RailroadInkSolver:
                             + quicksum(X[t,s,c] for (s, side, edgeType) in connectionPoints  #all connection pieces on any prior scenario
                                                 for c in prefixes(scenario) if c != tuple()
                                                 for t in T if t.get_edge_type_on_side(side) == edgeType))
+            self._lazy_constraints_added = True #set the flag for having added a lazy constraint
             #then add these to the board when checking for if pieces are missing
             for tile, s in tilesToAdd:
                 self._board.add_tile(tile, s)
@@ -1270,25 +1379,11 @@ class RailroadInkSolver:
     def _lazy_checks(self, scenario, XV, LV):
         #unpack some needed variables
         m = self.m
-        I = self.I
         S = self.S
         T = self.T
         X = self.X #retrieve the X variables
         
-        #find the pieces that need to be played in this scenario and the corresponding tiles
-        pieceCounts = self._dice_rolls[len(scenario)-1][scenario[-1]].get_dice()
-        tilesToCheck = []
-        for piece in pieceCounts:
-            tilesToCheck += Tile.get_variations(piece)
-        for piece in SPECIAL_PIECES:
-            tilesToCheck += Tile.get_variations(piece)
-        
-        #search through the current solution to see which pieces have been played
-        played_tiles = []
-        for s in I:
-            for tile in tilesToCheck:
-                if XV[tile,s,scenario] > 0.9:
-                    played_tiles += [(tile,s)]
+        played_tiles, piece_counts = self._get_pieces_played_in_scenario(XV, scenario)
         
         if self._isolated_pieces == "lazy":            
             isolatedPieces = self._add_any_isolated_placement_lazy_constraints(scenario, played_tiles)
@@ -1296,25 +1391,51 @@ class RailroadInkSolver:
             isolatedPieces = False
                                                 
         #if there were no isolated pieces, then all pieces were added to the board in the earlier process
-        missing_pieces = self._find_missing_pieces(played_tiles, pieceCounts)
+        missing_pieces = self._find_missing_pieces(played_tiles, piece_counts)
         
         canPlaceMissingPiece = self._can_place_a_missing_piece(missing_pieces)
         if canPlaceMissingPiece:
             m.cbLazy(1 <= quicksum(1 - X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] > 0.9) +
                           quicksum(X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] < 0.1))
+            self._lazy_constraints_added = True #set the flag
          
         #finally we also want to check for any loops for longest paths
         if self._longest_paths and self._path_loops == "lazy":
             self._add_any_loop_lazy_constraints(scenario, LV)
             
         #if we haven't added any lazy constraints for this scenario, do the checks for all the child scenarios
-        if not canPlaceMissingPiece and not isolatedPieces and len(scenario) < len(self._dice_rolls):
+        #also don't do any recursion if doing a linear_tree because there is only one step of integer
+        if not canPlaceMissingPiece and not isolatedPieces and len(scenario) < len(self._dice_rolls) and not self._linear_tree:
             for nextRoll in range(len(self._dice_rolls[len(scenario)])):
                 self._lazy_checks(scenario + (nextRoll,), XV, LV)
             
         #remove the tiles from the board
         for tile, square in played_tiles:
             self._board.remove_tile(square)
+            
+    """
+    uses the values in the model to determine which pieces are played in each scenario.
+    Returns the (tile, square) pairs of played tiles, and the counts of all pieces that need to be played
+    """
+    def _get_pieces_played_in_scenario(self, XV, scenario):
+        I = self.I
+        #find the pieces that need to be played in this scenario and the corresponding tiles
+        piece_counts = self._dice_rolls[len(scenario)-1][scenario[-1]].get_dice()
+        tilesToCheck = []
+        for piece in piece_counts:
+            tilesToCheck += Tile.get_variations(piece)
+        if self._specials:
+            for piece in SPECIAL_PIECES:
+                tilesToCheck += Tile.get_variations(piece)
+        
+        #search through the current solution to see which pieces have been played
+        played_tiles = []
+        for s in I:
+            for tile in tilesToCheck:
+                if XV[tile,s,scenario] > 0.9:
+                    played_tiles += [(tile,s)]
+        return played_tiles, piece_counts
+        
     
 """
 there may well be a better way of doing this, but Gurobi needs to have somewhere to "print" to,
@@ -1350,12 +1471,12 @@ if __name__ == "__main__":
     #s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", old_constraints=True, linear=True)
     #s.solve(print_output=True, printD="all")
     
-    board = Board()
-    dice_rolls = rulebook_dice_rolls()
-    #dice_rolls = [[DiceRoll({Piece.STRAIGHT_STATION : 1, Piece.RAILWAY_CORNER : 1, 
-    #                         Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1},1)]]
-    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", linear=True)
-    s.solve(print_output=True, printD="all")
+#    board = Board()
+#    dice_rolls = rulebook_dice_rolls()
+#    #dice_rolls = [[DiceRoll({Piece.STRAIGHT_STATION : 1, Piece.RAILWAY_CORNER : 1, 
+#    #                         Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1},1)]]
+#    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", linear=True, old_constraints=True)
+#    s.solve(print_output=True, printD="all")
     
     #board = Board()
 #    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1}, 1)],
@@ -1388,29 +1509,32 @@ if __name__ == "__main__":
     
     
     
-#    board = Board()
-#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
-#    #board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
-#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
-#    #board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
-#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
-#    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
-#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
-#    #board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
-#    #board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
-#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
-#    #board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
-#    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
-#    #board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
-#    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
-#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
-#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
-#    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
-#    #board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
-#    #board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+    board = Board()
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+    
+    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.OVERPASS : 1,
+                              Piece.HIGHWAY_CORNER : 1, Piece.HIGHWAY_STRAIGHT : 1}, 1)]]
 #    
 #    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
 #                                 Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
@@ -1428,5 +1552,5 @@ if __name__ == "__main__":
 #    #dice_rolls = [[DiceRoll({}, 1)]]
 #
 #    #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
-#    s = RailroadInkSolver(board, 2, dice_rolls, "expected-score")
-#    s.solve(print_output=True, printD="all")
+    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", solution_count=5)
+    s.solve(print_output=True)

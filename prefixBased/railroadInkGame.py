@@ -15,37 +15,44 @@ COMPARE_CSV = "compare.csv"
 
 
 """
-taking a list of files, read them as csvs and merge the results into a dictionary of all the contents of the files
+taking a list of seeds, read them as csvs and merge the results into a dictionary of all the contents of the files
 also returns a list of the entries to maintain an order
 """
-def merge_statistics(files):
-    results = {} #dictionary to store all the results
-    order = []
-    for file in files:
-        with open(file, newline='') as csvfile:
-            csvreader = csv.reader(csvfile, delimiter=",")
-            for row in csvreader:
-                stat = row[0]
-                val = float(row[1])
-                if stat not in results:
-                    results[stat] = []
-                    order.append(stat)
-                results[stat].append(val)
-    return results, order
+def merge_statistics(player_name, seeds, filetype):
+    data = {} #dictionary to store all the results
+    stats = [] #all the different names of statistics
+    for seed in seeds:
+        file = f"{RESULTS_FOLDER}/{player_name}/{seed}/{filetype}"
+        if os.path.isfile(file): 
+            with open(file, newline='') as csvfile:
+                csvreader = csv.reader(csvfile, delimiter=",")
+                for row in csvreader:
+                    stat = row[0]
+                    val = float(row[1])
+                    data[(stat, seed)] = val
+                    if stat not in stats:
+                        stats.append(stat)
+        else:
+            #this will error if the first one is missing, but that would be awfully unfortunate
+            for stat in stats:
+                data[(stat, seed)] = "MISSING"
+    return data, stats
 
 """
 taking the result of the merge_statistics function and a file to create a csv at,
 creates a csv with the aggregate information (mean, stddev, min, median, max)
 """
-def create_aggregate_csv(datalists, order, file):
+def create_aggregate_csv(data, stats, seeds, file):
     #now write to a csv all the results
     with open(file, mode="w", newline='') as printcsv:
         csvwriter = csv.writer(printcsv, delimiter=",")
-        csvwriter.writerow(["", "Mean", "StdDev", "Min", "Median", "Max"])
-        for entry in order:
-            data = datalists[entry] #get the list of data associated with this entry
-            #then enter the data
-            csvwriter.writerow([entry, round(np.mean(data),2), round(np.std(data),2), min(data), statistics.median(data), max(data)])    
+        csvwriter.writerow(["", "Mean", "StdDev", "Min", "Median", "Max"] + seeds)
+        for stat in stats:
+            results = [data[stat,seed] for seed in seeds if data[stat,seed] != "MISSING"] #get the list of data associated with this entry
+            #then enter the data and all the raw data
+            csvwriter.writerow([stat, round(np.mean(results),2), round(np.std(results),2), 
+                                min(results), statistics.median(results), max(results)] + 
+                                [data[stat,seed] for seed in seeds])    
 
 """
 takes a file and reads in the moves stored in it to create a board with those moves made
@@ -83,12 +90,12 @@ if __name__ == "__main__":
         #get the list of subdirectories in the given folder
         player_name = sys.argv[2]
         folder_contents = os.listdir("{0}/{1}".format(RESULTS_FOLDER, player_name))
+        seeds = sorted([f for f in folder_contents if "Seed" in f])
         
         #we want to aggregate both the info csv and the score csv
-        for csvfile in [INFO_CSV, SCORE_CSV]:
-            runs = [f"{RESULTS_FOLDER}/{player_name}/{f}/{csvfile}" for f in folder_contents if "Seed" in f]
-            datalists, order = merge_statistics(runs)
-            create_aggregate_csv(datalists, order, f"{RESULTS_FOLDER}/{player_name}/{csvfile}")
+        for csvfile in [INFO_CSV]:
+            data, stats = merge_statistics(player_name, seeds, csvfile)
+            create_aggregate_csv(data, stats, seeds, f"{RESULTS_FOLDER}/{player_name}/{csvfile}")
     elif sys.argv[1] == "genpic":
         #use: genpic path-to-folder
         #if the argument is "genpic" then generate a picture out of the moves csv in the given folder and
