@@ -1212,9 +1212,9 @@ class RailroadInkSolver:
         
         #add this soln to the solution list
         self._solutions.append(soln_id)
+        self._solutions.sort(reverse=True)
         #if there are too many solutions now, remove one
         if len(self._solutions) > self._solution_count:
-            self._solutions.sort(reverse=True)
             self._solutions.pop()
         #if there are the correct number of solutions, add a lower bound to the objective value
         #to force infeasibility if anything lower than these solutions is reached

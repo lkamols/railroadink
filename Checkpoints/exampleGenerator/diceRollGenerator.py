@@ -19,7 +19,7 @@ for d1 in range(6):
         
 COLS = 6
 counter = 0
-per_col = 162//COLS
+per_col = 168//COLS
 for col in range(COLS):
     print("\\begin{tabular}{c c c c c}")
     print("\\multicolumn{4}{c}{\\bfseries Dice} & $\mathbb{P}$ \\\\")

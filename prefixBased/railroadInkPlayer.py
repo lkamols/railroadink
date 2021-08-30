@@ -13,6 +13,8 @@ SCORE_CSV = "score.csv"
 INFO_CSV = "info.csv"
 MOVES_CSV = "moves.csv"
 EVALUATE_CSV = "evaluation.csv"
+COMPARISON_CSV = "comparison.csv"
+ALTERNATIVES_CSV = "alternatives.csv"
 ERROR_FILE = "MISMATCH.txt"
 
 BASE_CONFIG_NAME = "INITIAL"
@@ -180,8 +182,10 @@ class RailroadInkPlayer:
         #determine the move which wins most often
         best_move = np.argmax(win_probs)
         self._evaluate_csv(move_results[best_move])
+        #do some printing of the data used to get here (for sanity checks)
+        self._comparison_csv(move_results)
+        self._alternatives_csv(solns)
         return solns[best_move] #return the moves made in the best scenario
-        
     
     """
     solves for the move to make given a board, updates the moves_made list
@@ -274,16 +278,6 @@ class RailroadInkPlayer:
             results.append(round(s.get_result(),2))
         return results
 
-    """
-    create a csv with the scores of all of the different scenarios for the given results
-    """
-    def _evaluate_csv(self, results):   
-        evaluateFile = "{0}/{1}".format(self._folder, EVALUATE_CSV)
-        with open(evaluateFile, mode="w", newline="") as csv_file:
-            for i in range(len(self._all_rolls)):
-                csv_writer = csv.writer(csv_file, delimiter=",")
-                csv_writer.writerow([i, results[i]])
-        
     """
     take a turn, then evaluate it with the 162 different possible dice rolls, using the next
     turn of the given player
@@ -397,6 +391,41 @@ class RailroadInkPlayer:
             for move in all_moves:
                 csv_writer.writerow([move[0].get_piece(), move[0].get_rotation(), move[0].get_flip(),
                                      move[1][0], move[1][1], move[2]]) 
+    
+    """
+    create a csv with the scores of all of the different scenarios for the given results
+    """
+    def _evaluate_csv(self, results):   
+        evaluateFile = "{0}/{1}".format(self._folder, EVALUATE_CSV)
+        with open(evaluateFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            for i in range(len(self._all_rolls)):
+                csv_writer.writerow([i, results[i]])
+                
+    """
+    creates a csv with all the information from the scores of all of the runs
+    """
+    def _comparison_csv(self, move_results):
+        comparisonFile = "{0}/{1}".format(self._folder, COMPARISON_CSV)
+        with open(comparisonFile, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Scenario"] + [f"Roll {i}" for i in range(len(move_results))])
+            for i in range(len(self._all_rolls)):
+                csv_writer.writerow([i] + [move_results[move][i] for move in range(len(move_results))])      
+        
+    """
+    create a csv containing information about all the different solutions
+    """        
+    def _alternatives_csv(self, solns):
+        alternatives_file = f"{self._folder}/{ALTERNATIVES_CSV}"
+        with open(alternatives_file, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Move", "Piece", "Rotation", "Flip", "Row", "Col"])
+            for i, soln in enumerate(solns):
+                for move in soln:
+                    csv_writer.writerow([i, move[0].get_piece(), move[0].get_rotation(), move[0].get_flip(),
+                                     move[1][0], move[1][1]]) 
+        
     
 if __name__ == "__main__":
     
