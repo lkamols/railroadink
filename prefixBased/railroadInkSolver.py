@@ -1477,10 +1477,10 @@ def create_empty_folder(folder):
     
         
 if __name__ == "__main__":
-    #board = rulebook_game()
-    #dice_rolls = rulebook_dice_rolls()
-    #s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", old_constraints=True, linear=True)
-    #s.solve(print_output=True, printD="all")
+    board = rulebook_game()
+    dice_rolls = rulebook_dice_rolls()
+    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+    s.solve(print_output=True, printD="all")
     
 #    board = Board()
 #    dice_rolls = rulebook_dice_rolls()
@@ -1520,32 +1520,32 @@ if __name__ == "__main__":
     
     
     
-    board = Board()
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
-    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
-    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
-    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
-    
-    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.OVERPASS : 1,
-                              Piece.HIGHWAY_CORNER : 1, Piece.HIGHWAY_STRAIGHT : 1}, 1)]]
+#    board = Board()
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,0), 3)
+#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 3)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (1,2), 4)
+#    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R180), (1,3), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (2,1), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (2,3), 5)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,0), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (3,1), 2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (3,2), 3)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,6), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,2), 3)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R180, flip=False), (4,3), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_JUNCTION, Rotation.I), (4,4), 5)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,0), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,1), 1)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (5,2), 2)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 4)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,6), 5)
+#    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 5)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270, flip=False), (6,5), 5)
+#    
+#    dice_rolls = [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.OVERPASS : 1,
+#                              Piece.HIGHWAY_CORNER : 1, Piece.HIGHWAY_STRAIGHT : 1}, 1)]]
 #    
 #    dice_rolls = [[DiceRoll({Piece.HIGHWAY_STRAIGHT : 1, Piece.HIGHWAY_T : 1, 
 #                                 Piece.HIGHWAY_CORNER : 1, Piece.CORNER_STATION : 1}, 1)],
@@ -1563,5 +1563,5 @@ if __name__ == "__main__":
 #    #dice_rolls = [[DiceRoll({}, 1)]]
 #
 #    #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
-    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", solution_count=5)
-    s.solve(print_output=True)
+#    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", solution_count=5)
+#    s.solve(print_output=True)

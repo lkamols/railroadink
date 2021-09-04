@@ -167,7 +167,7 @@ class RailroadInkPlayer:
             #a solution is just a list of moves, need to update the board for each one
             for tile, square in soln:
                 board.add_tile(tile, square, turn)
-            #now using the new board, evaluate it by running all 162 scenarios
+            #now using the new board, evaluate it by running all 168 scenarios
             move_results.append(self._evaluate_scenario(board, turn, print_output))
             #clear the board
             for tile, square in soln:
@@ -252,7 +252,7 @@ class RailroadInkPlayer:
         self._turn = turn
        
     """
-    given a completed turn, determine the scores for each of the 162 possible dice rolls for the next turn
+    given a completed turn, determine the scores for each of the 168 possible dice rolls for the next turn
     """    
     def _evaluate_scenario(self, board, turn_played, print_output):
         turn = turn_played + 1
@@ -279,7 +279,7 @@ class RailroadInkPlayer:
         return results
 
     """
-    take a turn, then evaluate it with the 162 different possible dice rolls, using the next
+    take a turn, then evaluate it with the 168 different possible dice rolls, using the next
     turn of the given player
     """
     def evaluate_turn(self, print_pictures=False, print_output=False):
