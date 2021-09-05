@@ -102,10 +102,10 @@ def generate_scenario(start_roll, rolls):
                 probability = roll[1]
                 #check for if there was a special argument
                 if len(roll) == 3:
-                    include_specials = roll[2]
+                    specials = roll[2]
                 else:
-                    include_specials = True
-                this_turn.append(DiceRoll(pieces, probability, include_specials))
+                    specials = 1
+                this_turn.append(DiceRoll(pieces, probability, specials))
                 
         dice_rolls.append(this_turn)
     return dice_rolls            

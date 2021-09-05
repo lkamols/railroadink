@@ -1184,12 +1184,12 @@ class DiceRoll:
     Constructor.
     dice - dictionary mapping Pieces to number of occurrences
     probability - probability of this dice roll occuring, in [0,1]
-    include_specials - whether to include specials as part of this dice roll as well
+    specials - the count of specials associated with this roll
     """
-    def __init__(self, dice, probability, include_specials=True):
+    def __init__(self, dice, probability, specials=1):
         self._dice = dice
         self._probability = probability
-        self._include_specials = include_specials
+        self._specials = specials
     
     def get_dice(self):
         return self._dice

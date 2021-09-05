@@ -557,7 +557,7 @@ class RailroadInkSolver:
             #only allow these to be played if there is a special allowed for this dice roll
             self.one_special_per_turn = {c :
                 m.addConstr(quicksum(X[t,s,c] for s in S for p in SPECIAL_PIECES for t in Tile.get_variations(p))<=
-                            (1 if self._dice_rolls[len(c) - 1][c[-1]].does_include_specials() else 0))
+                            self._dice_rolls[len(c) - 1][c[-1]].specials())
                 for c in C if c != tuple()}  
                 
             #play max 3 special pieces total, for every single set of full dice rolls
@@ -1520,9 +1520,11 @@ def create_empty_folder(folder):
     
         
 if __name__ == "__main__":
-    board = rulebook_game()
+    #board = rulebook_game()
     #dice_rolls = rulebook_dice_rolls()
-    dice_rolls = [[DiceRoll({Piece.BASIC : 3, Piece.JUNCTION : 1},1)]]
+    #dice_rolls = [[DiceRoll({Piece.BASIC : 3, Piece.JUNCTION : 1},1)]]
+    board = Board()
+    dice_rolls = [[DiceRoll({Piece.BASIC : 6, Piece.JUNCTION : 1},1)]]
     s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
     s.solve(print_output=True, printD="all")
     
