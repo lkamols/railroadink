@@ -1197,8 +1197,8 @@ class DiceRoll:
     def get_probability(self):
         return self._probability
     
-    def does_include_specials(self):
-        return self._include_specials
+    def specials(self):
+        return self._specials
 
     
     """
