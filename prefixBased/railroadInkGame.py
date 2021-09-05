@@ -110,13 +110,13 @@ if __name__ == "__main__":
         #if the argument is "turn" then do a single turn from the state given in boardfile
         #first load in the board
         player = RailroadInkPlayer(sys.argv[2], int(sys.argv[3]), sys.argv[4])
-        player.play_turn(print_pictures=False, print_output=True)
+        player.play_turn(print_pictures=False, print_output=False)
     elif sys.argv[1] == "evaluate":
         #use: evaluate player seed scenario
         #does one step, then evaluates that move with the given player for all possible dice
         #rolls on the next move
         player = RailroadInkPlayer(sys.argv[2], int(sys.argv[3]), sys.argv[4])
-        player.evaluate_turn(print_pictures=False, print_output=True)
+        player.evaluate_turn(print_pictures=False, print_output=False)
     elif sys.argv[1] == "compare":
         #use: compare scenario {players}
         #compares all players for the given scenario and determines the likelihood of them winning

@@ -23,6 +23,7 @@ RESULTS_CSV = "points.csv"
 DECISIONS_CSV = "decisions.csv"
 SETTINGS_CSV = "settings.csv"
 INFO_CSV = "info.csv"
+ALTERNATIVES_CSV = "alternatives.csv"
 
 #default values for some of the tuneable characteristics
 DEFAULT_OPEN_ENDS_POINTS = [2.5, 2.5, 2, 1.6, 1.4, 0.5, 0]
@@ -235,7 +236,10 @@ class RailroadInkSolver:
     """
     def get_result(self):
         if self._solution_count == 1:
-            return self.m.objval
+            try:
+                return self.m.objval
+            except AttributeError:
+                return -1 #had an error here once, return -1 to flag where it was
         else:
             return 0 #the objective value isn't determined when multiple solutions are returned
         
@@ -977,6 +981,8 @@ class RailroadInkSolver:
                 self._make_points_csv(folder)
                 #create the csv for the moves being made
                 self._make_scenarios_csv(folder)
+            else:
+                self._make_alternatives_csv(folder)
             #create the csv for the settings
             self._make_settings_csv(folder)
             #create the csv with information about the run
@@ -1158,6 +1164,19 @@ class RailroadInkSolver:
             csv_writer.writerow(["status", GRB.OPTIMAL])
             if self._col_gen:
                 csv_writer.writerow(["columns", len(self.A)])
+                
+    """
+    create a csv containing information about all the different solutions
+    """        
+    def _make_alternatives_csv(self, folder):
+        alternatives_file = f"{folder}/{ALTERNATIVES_CSV}"
+        with open(alternatives_file, mode="w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=",")
+            csv_writer.writerow(["Move", "Piece", "Rotation", "Flip", "Row", "Col"])
+            for i, soln in enumerate(self.get_multiple_solutions()):
+                for move in soln:
+                    csv_writer.writerow([i, move[0].get_piece(), move[0].get_rotation(), move[0].get_flip(),
+                                     move[1][0], move[1][1]]) 
         
     #############################CALLBACK FUNCTIONS############################
       
@@ -1479,7 +1498,7 @@ def create_empty_folder(folder):
 if __name__ == "__main__":
     board = rulebook_game()
     dice_rolls = rulebook_dice_rolls()
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", solution_count=2)
     s.solve(print_output=True, printD="all")
     
 #    board = Board()

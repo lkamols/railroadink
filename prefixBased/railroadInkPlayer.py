@@ -5,6 +5,8 @@ import csv
 import json
 import math
 import numpy as np
+import time
+import func_timeout
 
 TURNS = 7
 PHOTO_FILENAME = "solution.png"
@@ -14,7 +16,6 @@ INFO_CSV = "info.csv"
 MOVES_CSV = "moves.csv"
 EVALUATE_CSV = "evaluation.csv"
 COMPARISON_CSV = "comparison.csv"
-ALTERNATIVES_CSV = "alternatives.csv"
 ERROR_FILE = "MISMATCH.txt"
 
 BASE_CONFIG_NAME = "INITIAL"
@@ -22,7 +23,17 @@ BASE_CONFIG_NAME = "INITIAL"
 PLAYER_FOLDER = "players"
 BOARDS_FOLDER = "boards"
 
-#RANDOM MOVE GENERATION FILES
+REMOVE_FROM_KWARGS = ["rolls", "solvetime", "runtime"]
+
+"""
+Arguments in player files
+All arguments to the RailroadInkSolver init function
+rolls - defines the types of rolls to consider
+runtime/solvetime - the total runtime and the portion of this allocated to solving the model
+        for the case that we are using the solve/evaluate approach for determining the best move
+"""
+
+
 
 """
 generates the rolls for a single game of Railroad Ink
@@ -184,8 +195,43 @@ class RailroadInkPlayer:
         self._evaluate_csv(move_results[best_move])
         #do some printing of the data used to get here (for sanity checks)
         self._comparison_csv(move_results)
-        self._alternatives_csv(solns)
         return solns[best_move] #return the moves made in the best scenario
+    
+    """
+    runs as many evaluations as possible with the remaining time, then evaluates the solutions 
+    to determine which is best
+    """
+    def _timed_compare_moves(self, board, s, turn, print_output, runtime, start_time):
+        #get the solutions which have been found
+        solns = s.get_multiple_solutions()
+        move_results = []
+        for soln in solns:
+            for tile, square in soln:
+                board.add_tile(tile, square, turn)
+            #now try to run the function with a timeout
+            try:
+                time_remaining = runtime - (time.time() - start_time) #how long is left
+                #run the function with a timeout
+                scenario_results = func_timeout.func_timeout(time_remaining, self._evaluate_scenario, args=(board, turn, print_output))
+                move_results.append(scenario_results)
+            except func_timeout.FunctionTimedOut:
+                #this run timed out, don't add any moves for this one and don't explore any more options
+                break
+        #now that we are here, we have evaluated as many solutions as possible in the given time
+        solution_count = len(move_results)
+        win_probs = [0] * solution_count #all the candidates start with a win prob of 0
+        #now go through each of the games and determine the winner and alter the win probabilities
+        for game_index in range(len(self._all_rolls)):
+            winning_score = max(move_results[move][game_index] for move in range(solution_count))
+            for move in range(solution_count):
+                if math.isclose(move_results[move][game_index], winning_score):
+                    win_probs[move] += self._all_rolls[game_index].get_probability()
+        #determine the move which wins most often
+        best_move = np.argmax(win_probs)
+        self._evaluate_csv(move_results[best_move])
+        #do some printing of the data used to get here (for sanity checks)
+        self._comparison_csv(move_results)
+        return solns[best_move] #return the moves made in the best scenario        
     
     """
     solves for the move to make given a board, updates the moves_made list
@@ -202,6 +248,14 @@ class RailroadInkPlayer:
         kwargs = dict(self._kwargs)
         if "rolls" in kwargs:
             kwargs.pop("rolls")
+        if kwargs.get("solvetime", 0) > 0:
+            kwargs["timeouts"] = [kwargs["solvetime"]] * 7 #set the timeout to be the solvetime
+            kwargs["solution_count"] = (kwargs["runtime"] // (8*60)) + 1 #work out how many max solutions to take
+            start_time = time.time() #record the time we are starting everything
+            
+        for arg in REMOVE_FROM_KWARGS:
+            if arg in kwargs:
+                kwargs.pop(arg)
         
         #run the game
         s = RailroadInkSolver(board, turn, dice_rolls, **kwargs)
@@ -210,6 +264,9 @@ class RailroadInkPlayer:
         #now check for if multiple solutions were generated and if so evaluate them
         if self._kwargs.get("solution_count", 1) > 1:
             moves = self._compare_moves(board, s, turn, print_output)
+        elif self._kwargs.get("solvetime", 0) > 0:
+            #we have done a solve, now we need to evaluate as many moves as possible with the remaining time
+            moves = self._timed_compare_moves(board, s, turn, print_output, self._kwargs["runtime"], start_time)
         else:    
             #unpack the moves that were made and add them to moves_made
             moves = s.get_moves_made()[(0,)]
@@ -270,8 +327,9 @@ class RailroadInkPlayer:
             
             #strip the 'rolls' information from the kwargs to pass them along
             kwargs = dict(self._kwargs)
-            if "rolls" in kwargs:
-                kwargs.pop("rolls")
+            for arg in REMOVE_FROM_KWARGS:
+                if arg in kwargs:
+                    kwargs.pop(arg)
                 
             s = RailroadInkSolver(board, turn, dice_rolls, **kwargs)
             s.solve(folder=None, print_output=print_output)
@@ -284,7 +342,7 @@ class RailroadInkPlayer:
     """
     def evaluate_turn(self, print_pictures=False, print_output=False):
         self.play_turn(print_pictures, print_output) #first play the turn
-        if self._kwargs.get("solution_count", 1) > 1:
+        if self._kwargs.get("solution_count", 1) > 1 or self._kwargs.get("solvetime", None) != None:
             return #evaluation was already done
         results = self._evaluate_scenario(self._board, self._turn, print_output)
         self._evaluate_csv(results)
@@ -412,19 +470,6 @@ class RailroadInkPlayer:
             csv_writer.writerow(["Scenario"] + [f"Roll {i}" for i in range(len(move_results))])
             for i in range(len(self._all_rolls)):
                 csv_writer.writerow([i] + [move_results[move][i] for move in range(len(move_results))])      
-        
-    """
-    create a csv containing information about all the different solutions
-    """        
-    def _alternatives_csv(self, solns):
-        alternatives_file = f"{self._folder}/{ALTERNATIVES_CSV}"
-        with open(alternatives_file, mode="w", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file, delimiter=",")
-            csv_writer.writerow(["Move", "Piece", "Rotation", "Flip", "Row", "Col"])
-            for i, soln in enumerate(solns):
-                for move in soln:
-                    csv_writer.writerow([i, move[0].get_piece(), move[0].get_rotation(), move[0].get_flip(),
-                                     move[1][0], move[1][1]]) 
         
     
 if __name__ == "__main__":
