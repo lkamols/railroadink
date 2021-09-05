@@ -75,6 +75,10 @@ class Piece(IntEnum):
     OVERPASS_HIGHWAY = 19
     #an overarching one for all the special tiles, to say we have a special tile
     SPECIAL = 20
+    #an overarching one for all the basic and junction tiles, to say we have a basic or junction tile
+    BASIC = 21
+    JUNCTION = 22
+    
     
 #grouping of pieces
 BASIC_PIECES = [Piece.RAILWAY_CORNER, Piece.RAILWAY_T, Piece.RAILWAY_STRAIGHT,
@@ -290,15 +294,29 @@ class Tile:
     """
     @staticmethod
     def get_variations(piece):
-        rotations, flip = Tile._tile_variations[piece]
-        variations = []
-        #apply each of the rotations to create new tiles
-        for rotation_val in range(rotations):
-            variations += [Tile(piece, Rotation(rotation_val))]
-        #then if we can reverse it as well, do that
-        if flip:
+        #start by unpacking any multi piece signals
+        if piece == Piece.SPECIAL:
+            variations = []
+            for piece in SPECIAL_PIECES:
+                variations += Tile.get_variations(piece)
+        elif piece == Piece.BASIC:
+            variations = []
+            for piece in BASIC_PIECES:
+                variations += Tile.get_variations(piece)
+        elif piece == Piece.JUNCTION:
+            variations = []
+            for piece in JUNCTION_PIECES:
+                variations += Tile.get_variations(piece)
+        else:
+            rotations, flip = Tile._tile_variations[piece]
+            variations = []
+            #apply each of the rotations to create new tiles
             for rotation_val in range(rotations):
-                variations += [Tile(piece, Rotation(rotation_val), flip=True)]
+                variations += [Tile(piece, Rotation(rotation_val))]
+            #then if we can reverse it as well, do that
+            if flip:
+                for rotation_val in range(rotations):
+                    variations += [Tile(piece, Rotation(rotation_val), flip=True)]
         return variations
     
     """
@@ -1162,6 +1180,12 @@ class for a dice roll, a dice roll has a dictionary of pieces and a probability
 """
 class DiceRoll:
     
+    """
+    Constructor.
+    dice - dictionary mapping Pieces to number of occurrences
+    probability - probability of this dice roll occuring, in [0,1]
+    include_specials - whether to include specials as part of this dice roll as well
+    """
     def __init__(self, dice, probability, include_specials=True):
         self._dice = dice
         self._probability = probability
@@ -1175,6 +1199,7 @@ class DiceRoll:
     
     def does_include_specials(self):
         return self._include_specials
+
     
     """
     gets a list of the full distribution of dice rolls

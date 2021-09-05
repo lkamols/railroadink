@@ -494,13 +494,34 @@ class RailroadInkSolver:
             m.addConstr(X[t,s,()] == (1 if self._board.get_tile_at(s) == t else 0))
             for s in S for t in T}
             
-        #on every turn, in every scenario, we can only use the moves that are allocated
-        self.use_pieces = {(p,c) : 
-            m.addConstr(quicksum(X[t,s,c] for s in S if self._board.is_square_free(s)
-                                 for t in Tile.get_variations(p)) <= 
-                        (self._dice_rolls[len(c) - 1][c[-1]].get_dice().get(p, 0))) 
-                        #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
-            for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
+        #add constraints for the use of pieces, this is split up to allow for generic pieces
+        self.use_pieces = {}
+        for c in C:
+            if c != tuple():
+                dice = self._dice_rolls[len(c) - 1][c[-1]].get_dice()
+                for p in dice:
+                    #add upper bounds on any pieces that are allowed
+                    self.use_pieces[p,c] = m.addConstr(quicksum(X[t,s,c] for s in S if self._board.is_square_free(s)
+                                 for t in Tile.get_variations(p)) <= dice[p])
+                for p in BASIC_PIECES:
+                    if p not in dice and Piece.BASIC not in dice:
+                        self.use_pieces[p,c] = m.addConstr(quicksum(X[t,s,c] for s in S if self._board.is_square_free(s)
+                                 for t in Tile.get_variations(p)) <= 0)
+                for p in JUNCTION_PIECES:
+                    if p not in dice and Piece.JUNCTION not in dice:
+                        self.use_pieces[p,c] = m.addConstr(quicksum(X[t,s,c] for s in S if self._board.is_square_free(s)
+                                 for t in Tile.get_variations(p)) <= 0)   
+                for p in START_PIECES:
+                    self.use_pieces[p,c] = m.addConstr(quicksum(X[t,s,c] for s in S if self._board.is_square_free(s)
+                                 for t in Tile.get_variations(p)) <= 0)   
+
+#old more readable version of this constraint (doesn't account for generic pieces)
+#        self.use_pieces = {(p,c) : 
+#            m.addConstr(quicksum(X[t,s,c] for s in S if self._board.is_square_free(s)
+#                                 for t in Tile.get_variations(p)) <= 
+#                        (self._dice_rolls[len(c) - 1][c[-1]].get_dice().get(p, 0))) 
+#                        #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
+#            for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
         
         #if we are using column generation, add those constraints
         if self._col_gen:
@@ -1421,13 +1442,16 @@ class RailroadInkSolver:
             isolatedPieces = False
                                                 
         #if there were no isolated pieces, then all pieces were added to the board in the earlier process
-        missing_pieces = self._find_missing_pieces(played_tiles, piece_counts)
-        
-        canPlaceMissingPiece = self._can_place_a_missing_piece(missing_pieces)
-        if canPlaceMissingPiece:
-            m.cbLazy(1 <= quicksum(1 - X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] > 0.9) +
-                          quicksum(X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] < 0.1))
-            self._lazy_constraints_added = True #set the flag
+        if Piece.BASIC not in piece_counts:
+            missing_pieces = self._find_missing_pieces(played_tiles, piece_counts)
+            
+            canPlaceMissingPiece = self._can_place_a_missing_piece(missing_pieces)
+            if canPlaceMissingPiece:
+                m.cbLazy(1 <= quicksum(1 - X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] > 0.9) +
+                              quicksum(X[t,s,cc] for t in T for s in S for cc in prefixes(scenario) if cc != tuple() and XV[t,s,cc] < 0.1))
+                self._lazy_constraints_added = True #set the flag
+        else:
+            canPlaceMissingPiece = False #don't consider the missing piece idea when playing generic pieces, it doesn't make sense
          
         #finally we also want to check for any loops for longest paths
         if self._longest_paths and self._path_loops == "lazy":
@@ -1497,8 +1521,9 @@ def create_empty_folder(folder):
         
 if __name__ == "__main__":
     board = rulebook_game()
-    dice_rolls = rulebook_dice_rolls()
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score", solution_count=2)
+    #dice_rolls = rulebook_dice_rolls()
+    dice_rolls = [[DiceRoll({Piece.BASIC : 3, Piece.JUNCTION : 1},1)]]
+    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
     s.solve(print_output=True, printD="all")
     
 #    board = Board()
