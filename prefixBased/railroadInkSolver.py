@@ -71,6 +71,7 @@ class RailroadInkSolver:
     specials - whether or not to consider special moves in the construction
     col_gen - whether to generate all possible moves in advance with a priori column generation and use these
     intermediate_connections - whether to introduce variables for intermediate connections
+    piece_cap - the maximum number of each piece that can be played as a generic piece
     isolated_pieces - how to handle isolated pieces, options are "lazy" for using lazy constraints or "relief"
             for using a flow problem
     path_loops - how to handle path loops, options are "lazy" for using lazy constraints or "relief" for using
@@ -95,7 +96,7 @@ class RailroadInkSolver:
             creates a list of that many best solutions found. Requires only 1 scenario on the next turn
     """
     def __init__(self, board, turn, dice_rolls, objective, specials=True,
-                 col_gen=False, intermediate_connections=False,
+                 col_gen=False, intermediate_connections=False, piece_cap=-1,
                  isolated_pieces="lazy", path_loops="relief",
                  connecting_exits=True, longest_paths=True, errors=True,
                  open_ends=False, open_end_points=DEFAULT_OPEN_ENDS_POINTS,
@@ -114,6 +115,7 @@ class RailroadInkSolver:
         self._specials = specials
         self._col_gen = col_gen
         self._intermediate_connections = intermediate_connections
+        self._piece_cap = piece_cap
         self._isolated_pieces = isolated_pieces
         self._path_loops = path_loops
         self._connecting_exits = connecting_exits
@@ -522,6 +524,13 @@ class RailroadInkSolver:
 #                        (self._dice_rolls[len(c) - 1][c[-1]].get_dice().get(p, 0))) 
 #                        #^ this gets the dictionary of this dice roll, then searches for the piece, defaulting to zero
 #            for p in BASIC_PIECES + JUNCTION_PIECES + START_PIECES for c in C if c != tuple()}
+             
+        #bound the number of generic pieces of each type that can be played
+        if self._piece_cap > 0:
+            self.generic_piece_caps = {p :
+                m.addConstr(quicksum(X[t,s,c] for c in C if (c != tuple() and (self._dice_rolls[len(c) - 1][c[-1]].get_dice().get(Piece.BASIC,None) != None)) 
+                                              for t in Tile.get_variations(p) for s in S if self._board.is_square_free(s)) <= self._piece_cap)
+                for p in BASIC_PIECES + JUNCTION_PIECES}
         
         #if we are using column generation, add those constraints
         if self._col_gen:
@@ -1524,8 +1533,8 @@ if __name__ == "__main__":
     #dice_rolls = rulebook_dice_rolls()
     #dice_rolls = [[DiceRoll({Piece.BASIC : 3, Piece.JUNCTION : 1},1)]]
     board = Board()
-    dice_rolls = [[DiceRoll({Piece.BASIC : 6, Piece.JUNCTION : 1},1)]]
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+    dice_rolls = [[DiceRoll({Piece.BASIC : 21, Piece.JUNCTION : 7},1,3)]]
+    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", )
     s.solve(print_output=True, printD="all")
     
 #    board = Board()
