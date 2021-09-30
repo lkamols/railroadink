@@ -1,4 +1,4 @@
-from railroadInkSolver import RailroadInkSolver, RESULTS_FOLDER, create_empty_folder
+from railroadInkSolver import RailroadInkSolver, RESULTS_FOLDER, create_empty_folder, DECISIONS_CSV
 from board import Board, Tile, Piece, Rotation, DiceRoll, BASIC_PIECES, JUNCTION_PIECES
 import random
 import csv
@@ -7,6 +7,8 @@ import math
 import numpy as np
 import time
 import func_timeout
+import os.path
+from os import path
 
 TURNS = 7
 PHOTO_FILENAME = "solution.png"
@@ -23,7 +25,7 @@ BASE_CONFIG_NAME = "INITIAL"
 PLAYER_FOLDER = "players"
 BOARDS_FOLDER = "boards"
 
-REMOVE_FROM_KWARGS = ["rolls", "solvetime", "runtime"]
+REMOVE_FROM_KWARGS = ["rolls", "solvetime", "runtime", "cache"]
 
 """
 Arguments in player files
@@ -32,8 +34,6 @@ rolls - defines the types of rolls to consider
 runtime/solvetime - the total runtime and the portion of this allocated to solving the model
         for the case that we are using the solve/evaluate approach for determining the best move
 """
-
-
 
 """
 generates the rolls for a single game of Railroad Ink
@@ -141,16 +141,14 @@ class RailroadInkPlayer:
         self._game_seed = game_seed
         random.seed(game_seed) #seed the game
         self._scenario = scenario
-        
+      
     """
-    using the given scenario and game-seed, find the corresponding board file and load in the moves from it
-    these are the starting moves
-    returns the moves made, and the turn of the current move
+    read from a file a set of moves
+    returns a list of moves as (tile, square, turn) tuples
     """
-    def _get_starting_moves(self):
+    def _moves_from_file(self, file):
         moves = []
-        latest_turn = 0 #the latest turn in this scenario
-        with open(f"{BOARDS_FOLDER}/{self._scenario}/board{self._game_seed}.csv", newline='') as movescsv:
+        with open(folder, newline='') as movescsv:
             csvreader = csv.reader(movescsv, delimiter=",")
             for entry in csvreader:
                 #do a quick check that the row being read is an information row
@@ -163,8 +161,18 @@ class RailroadInkPlayer:
                     col = int(entry[4])
                     turn = int(entry[5])
                     moves.append((Tile(piece, rotation, flip), (row,col), turn))
-                    latest_turn = max(latest_turn, turn) #update the latest turn
-        return moves, latest_turn + 1 #the last turn + 1 is the current turn
+        return moves
+    
+    """
+    using the given scenario and game-seed, find the corresponding board file and load in the moves from it
+    these are the starting moves
+    returns the moves made, and the turn of the current move
+    """
+    def _get_starting_moves(self):
+        file = f"{BOARDS_FOLDER}/{self._scenario}/board{self._game_seed}.csv"
+        moves = self._moves_from_file(file)
+        latest_turn = max(move[2] for move in moves) + 1
+        return moves, latest_turn #the last turn + 1 is the current turn
     
     """
     if multiple solutions were found, compare them to find which is the best
@@ -347,6 +355,42 @@ class RailroadInkPlayer:
         results = self._evaluate_scenario(self._board, self._turn, print_output)
         self._evaluate_csv(results)
         
+    """
+    check if an existing calculation has been done for this turn, if so update the
+    times and moves_made lists with the results
+    returns the result if there was one, -1 otherwise
+    """
+    def _check_for_existing_calculation(self, turn_folder, turn, times, moves_made):
+        #check if we have already calculated this turn and if so, don't redo it
+        if path.isfile(f"{RESULTS_FOLDER}/{turn_folder}/{INFO_CSV}"):
+            #read in the time taken and result from the infocsv
+            with open(f"{RESULTS_FOLDER}/{turn_folder}/{INFO_CSV}", newline='') as infocsv:
+                csvreader = csv.reader(infocsv, delimiter=",")
+                for entry in csvreader:
+                    if entry[0] == "gurobi time":
+                        times.append(float(entry[1]))
+                    if entry[0] == "result":
+                        result = entry[1]
+            #read in the moves made from the decisions csv
+            with open(f"{RESULTS_FOLDER}/{turn_folder}/{DECISIONS_CSV}", newline='') as decisionscsv:
+                csvreader = csv.reader(decisionscsv, delimiter=",")
+                firstmove = False #we are only interested in those listed under "Scenario (0,)"
+                for entry in csvreader:
+                    #if this line is a scenario labelling, use that to 
+                    if "Scenario" in entry[0]:
+                        firstmove = True if entry[0] == "Scenario (0,)" else False
+                    elif firstmove: #process any other lines if firstmove is currently true
+                        #unpack each of the columns
+                        piece = Piece[entry[0].split(".")[1]]
+                        rotation = Rotation[entry[1].split(".")[1]]
+                        flip = entry[2] == "True"
+                        row = int(entry[3])
+                        col = int(entry[4])
+                        #append this to the moves made list
+                        moves_made.append((Tile(piece, rotation, flip), (row,col), turn))   
+            return result #should be defined by now
+        else:
+            return -1
        
     """
     play a full game of Railroad Ink with the given player and dice rolls (from the seed)
@@ -358,7 +402,10 @@ class RailroadInkPlayer:
         rolls = generate_game_rolls(self._game_seed)
         
         #ensure there is an empty folder
-        create_empty_folder(self._folder)
+        #if the folder already exists, leave it because we might be able to reuse some things
+        if not path.exists(self._folder):
+            print("here")
+            create_empty_folder(self._folder)
         
         times = [] #track the times of each of the runs
         moves_made = [] #track all the moves made so that they can be put into a csv at the end
@@ -369,11 +416,16 @@ class RailroadInkPlayer:
             #work out where to save the run information to
             turn_folder = "{0}/Turn-{1}".format(self._call_folder, turn)
             
+            #check for if this has already been run
+            result = self._check_for_existing_calculation(turn_folder, turn, times, moves_made)
+            if result  != -1: #if there was actually an existing solve, continue
+                continue
+            
             self._update_kwargs_dict(turn)
             
             #solve the turn
             s = self._solve_turn(board, moves_made, rolls[turn-1], turn, turn_folder, print_output)
-            
+            result = s.get_result()
             #update the list of solve times
             times.append(s.get_gurobi_runtime())
         
@@ -387,7 +439,7 @@ class RailroadInkPlayer:
         self._make_moves_csv(moves_made)
             
         #return the final score
-        return s.get_result()
+        return result
     
     """
     determines the dice rolls which will be used to call the solver

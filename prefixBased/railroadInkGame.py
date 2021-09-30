@@ -13,7 +13,6 @@ from railroadInkPlayer import RailroadInkPlayer, INFO_CSV, SCORE_CSV, MOVES_CSV,
 
 COMPARE_CSV = "compare.csv"
 
-
 """
 taking a list of seeds, read them as csvs and merge the results into a dictionary of all the contents of the files
 also returns a list of the entries to maintain an order
@@ -82,7 +81,7 @@ if __name__ == "__main__":
         #use: play player-name seed
         #if the argument is 'play' then play a full game using the next arguments
         player = RailroadInkPlayer(sys.argv[2], int(sys.argv[3]))
-        player.play_game(print_pictures=False, print_output=False)
+        player.play_game(print_pictures=False, print_output=True)
     elif sys.argv[1] == "aggregate":
         #use: aggregate player-name
         #if the argument is 'aggregate' then go through all of the runs that have been done
@@ -110,7 +109,7 @@ if __name__ == "__main__":
         #if the argument is "turn" then do a single turn from the state given in boardfile
         #first load in the board
         player = RailroadInkPlayer(sys.argv[2], int(sys.argv[3]), sys.argv[4])
-        player.play_turn(print_pictures=False, print_output=False)
+        player.play_turn(print_pictures=False, print_output=True)
     elif sys.argv[1] == "evaluate":
         #use: evaluate player seed scenario
         #does one step, then evaluates that move with the given player for all possible dice
@@ -140,6 +139,7 @@ if __name__ == "__main__":
             csvwriter = csv.writer(printcsv, delimiter=",")
             csvwriter.writerow(["Seed"] + players)
             #for each of the seeds/games, run through all the players and work out who wins
+            totals = {player : 0 for player in players}
             for seed in seeds:
                 scores = {}
                 #read each players scores for this seed and save them
@@ -169,5 +169,10 @@ if __name__ == "__main__":
                             win_probs[player] = "MISSING"
                 #now print this to the collated csv
                 csvwriter.writerow([seed] + [win_probs[player] for player in players])
+                #update the totals
+                for player in players:
+                    totals[player] += (win_probs[player] if win_probs[player] != "MISSING" else 0)
+            csvwriter.writerow(["total"] + [totals[player] for player in players])
+                
     else:
         raise ValueError("Invalid argument supplied, must be one of\n\t'play', 'aggregate', 'genpic', 'turn', 'evaluate', 'compare'")
