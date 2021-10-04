@@ -393,6 +393,7 @@ class Tile:
 A class for all the information about a given state of play
 """
 class Board:
+
     
     """
     Constructor.
@@ -467,9 +468,6 @@ class Board:
                     piece_image.paste(txt, (piece_image.size[1]*3//4, 0))
                     im.paste(piece_image, (LEFT_OFFSET + BOARD_WIDTH * col // NUM_COLS, TOP_OFFSET + BOARD_HEIGHT * row // NUM_ROWS))
 
-
-        
-        
         #now display the image, depending on if a file is given
         if file == None:
             im.show()
@@ -500,6 +498,16 @@ class Board:
     @staticmethod
     def is_centre_square(s):
         return (s[0] >= 2 and s[0] <= 4 and s[1] >= 2 and s[1] <= 4)
+    
+    """
+    return a deep copy of the given board
+    """
+    @staticmethod
+    def deep_copy_board(original_board):
+        copy = Board()
+        for square in original_board._board:
+            copy.add_tile(original_board.get_tile_at(square), square, original_board._turn.get(square,-1))
+        return copy
         
     def get_tile_at(self, s):
         return self._board.get(s, None)
@@ -809,7 +817,6 @@ class Board:
     def best_move(self, pieces):
         #generate all the possible moves
         all_moves = self.all_possible_moves(pieces)
-        print(len(all_moves))
         best_score = (0,)
         best_moves = None
         #then score all of these scenarios
@@ -1291,33 +1298,35 @@ if __name__ == "__main__":
 #                             Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1}, include_specials=False)
     
     board = Board()
-    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.R270), (0,2), 1)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.I), (1,2), 1)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (1,0), 1)
-    board.add_tile(Tile(Piece.CORNER_STATION,Rotation.R90), (0,1), 1)
-    board.add_tile(Tile(Piece.CORNER_STATION,Rotation.R90), (5,6), 2)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (1,1), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R90), (0,5), 2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R270), (0,6), 2)
-    board.add_tile(Tile(Piece.RAILWAY_T,Rotation.R90), (1,3), 3)
-    board.add_tile(Tile(Piece.OVERPASS,Rotation.I), (1,6), 3)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.I), (0,3), 3)
-    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT,Rotation.I), (6,5), 3)
-    board.add_tile(Tile(Piece.OVERPASS,Rotation.I), (2,6), 4)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.R90), (2,3), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R270), (4,6), 4)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (2,4), 4)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.R270), (2,5), 5)
-    board.add_tile(Tile(Piece.HIGHWAY_T,Rotation.I), (3,6), 5)
-    board.add_tile(Tile(Piece.CORNER_JUNCTION,Rotation.R180), (4,5), 5)
-    board.add_tile(Tile(Piece.OVERPASS,Rotation.R90), (3,5), 5)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R180), (3,4), 5)
-    board.add_tile(Tile(Piece.THREE_H_JUNCTION,Rotation.R270), (4,4), 6)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (1,5), 6)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.R270), (5,0), 6)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.R90), (6,0), 6)
-    board.add_tile(Tile(Piece.CORNER_STATION,Rotation.R270), (6,1), 6)
-    board.fancy_board_print()
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (0,2), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (0,3), 1)
+    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.I),(0,4),1)
+    board.add_tile(Tile(Piece.CORNER_STATION,Rotation.R90,False),(0,1),1)
+    board.add_tile(Tile(Piece.OVERPASS,Rotation.I,False),(1,6),2)
+    board.add_tile(Tile(Piece.RAILWAY_T,Rotation.I,False),(1,5),2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R90,False),(2,6),2)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R180), (0,6), 2)
+    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (5,0), 3)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (6,0), 3)
+    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (1,4), 3)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (6,1), 3)
+    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (2,2), 4)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (3,2), 4)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (2,3), 4)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (2,4), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R270), (3,3), 5)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (4,4), 5)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (6,3), 5)
+    board.add_tile(Tile(Piece.CORNER_JUNCTION, Rotation.I), (5,3), 5)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (4,3), 5)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,6), 6)
+    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (2,5), 6)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 6)
+    board.add_tile(Tile(Piece.THREE_H_JUNCTION, Rotation.I), (0,5), 6)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (3,5), 6)
+
+
+    cp.fancy_board_print()
 
     #the perfect game
 #    board = Board()

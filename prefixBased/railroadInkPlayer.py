@@ -212,6 +212,7 @@ class RailroadInkPlayer:
     def _timed_compare_moves(self, board, s, turn, print_output, runtime, start_time):
         #get the solutions which have been found
         solns = s.get_multiple_solutions()
+        print("1st", solns)
         move_results = []
         for soln in solns:
             for tile, square in soln:
@@ -220,11 +221,19 @@ class RailroadInkPlayer:
             try:
                 time_remaining = runtime - (time.time() - start_time) #how long is left
                 #run the function with a timeout
-                scenario_results = func_timeout.func_timeout(time_remaining, self._evaluate_scenario, args=(board, turn, print_output))
+                #this may alter the board state, so pass a deep copy of the board
+                board_copy = Board.deep_copy_board(board)
+                scenario_results = func_timeout.func_timeout(time_remaining, self._evaluate_scenario, args=(board_copy, turn, print_output))
                 move_results.append(scenario_results)
             except func_timeout.FunctionTimedOut:
                 #this run timed out, don't add any moves for this one and don't explore any more options
+                #remove the squares
+                for tile, square in soln:
+                    board.remove_tile(square)
                 break
+            #remove the squares
+            for tile, square in soln:
+                board.remove_tile(square)
         #now that we are here, we have evaluated as many solutions as possible in the given time
         solution_count = len(move_results)
         win_probs = [0] * solution_count #all the candidates start with a win prob of 0
@@ -235,10 +244,13 @@ class RailroadInkPlayer:
                 if math.isclose(move_results[move][game_index], winning_score):
                     win_probs[move] += self._all_rolls[game_index].get_probability()
         #determine the move which wins most often
+        print("2nd", solns)
         best_move = np.argmax(win_probs)
         self._evaluate_csv(move_results[best_move])
         #do some printing of the data used to get here (for sanity checks)
         self._comparison_csv(move_results)
+        print("best move", best_move)
+        print("best move moves", solns[best_move])
         return solns[best_move] #return the moves made in the best scenario        
     
     """
@@ -264,10 +276,20 @@ class RailroadInkPlayer:
         for arg in REMOVE_FROM_KWARGS:
             if arg in kwargs:
                 kwargs.pop(arg)
+                
+        print("BEFORE SOLVE")
+        for r in range(7):
+            for c in range(7):
+                print(r, c, board.get_piece_at((r,c)))
         
         #run the game
         s = RailroadInkSolver(board, turn, dice_rolls, **kwargs)
         s.solve(folder=folder, print_output=print_output)
+        
+        print("AFTER SOLVE")
+        for r in range(7):
+            for c in range(7):
+                print(r, c, board.get_piece_at((r,c)))
         
         #now check for if multiple solutions were generated and if so evaluate them
         if self._kwargs.get("solution_count", 1) > 1:
@@ -404,7 +426,6 @@ class RailroadInkPlayer:
         #ensure there is an empty folder
         #if the folder already exists, leave it because we might be able to reuse some things
         if not path.exists(self._folder):
-            print("here")
             create_empty_folder(self._folder)
         
         times = [] #track the times of each of the runs
