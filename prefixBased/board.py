@@ -1207,6 +1207,8 @@ class DiceRoll:
     def specials(self):
         return self._specials
 
+    def set_specials(self, specials):
+        self._specials = specials
     
     """
     gets a list of the full distribution of dice rolls
@@ -1272,6 +1274,10 @@ def rulebook_dice_rolls():
             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)]]
 
 if __name__ == "__main__":
+    
+    dice = DiceRoll.get_full_distribution()
+    for i, d in enumerate(dice):
+        print(i, d)
 
     #board = rulebook_game()
     #board = Board()
@@ -1297,36 +1303,36 @@ if __name__ == "__main__":
 #    a = board.all_possible_moves({Piece.STRAIGHT_STATION : 1, Piece.RAILWAY_CORNER : 1, 
 #                             Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1}, include_specials=False)
     
-    board = Board()
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (0,2), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (0,3), 1)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.I),(0,4),1)
-    board.add_tile(Tile(Piece.CORNER_STATION,Rotation.R90,False),(0,1),1)
-    board.add_tile(Tile(Piece.OVERPASS,Rotation.I,False),(1,6),2)
-    board.add_tile(Tile(Piece.RAILWAY_T,Rotation.I,False),(1,5),2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R90,False),(2,6),2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R180), (0,6), 2)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (5,0), 3)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (6,0), 3)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (1,4), 3)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (6,1), 3)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (2,2), 4)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (3,2), 4)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (2,3), 4)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (2,4), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R270), (3,3), 5)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (4,4), 5)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (6,3), 5)
-    board.add_tile(Tile(Piece.CORNER_JUNCTION, Rotation.I), (5,3), 5)
-    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (4,3), 5)
-    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,6), 6)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (2,5), 6)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 6)
-    board.add_tile(Tile(Piece.THREE_H_JUNCTION, Rotation.I), (0,5), 6)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (3,5), 6)
-
-
-    cp.fancy_board_print()
+#    board = Board()
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (0,2), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (0,3), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.I),(0,4),1)
+#    board.add_tile(Tile(Piece.CORNER_STATION,Rotation.R90,False),(0,1),1)
+#    board.add_tile(Tile(Piece.OVERPASS,Rotation.I,False),(1,6),2)
+#    board.add_tile(Tile(Piece.RAILWAY_T,Rotation.I,False),(1,5),2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R90,False),(2,6),2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R180), (0,6), 2)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (5,0), 3)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (6,0), 3)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (1,4), 3)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (6,1), 3)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (2,2), 4)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (3,2), 4)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (2,3), 4)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (2,4), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R270), (3,3), 5)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (4,4), 5)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (6,3), 5)
+#    board.add_tile(Tile(Piece.CORNER_JUNCTION, Rotation.I), (5,3), 5)
+#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (4,3), 5)
+#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,6), 6)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (2,5), 6)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 6)
+#    board.add_tile(Tile(Piece.THREE_H_JUNCTION, Rotation.I), (0,5), 6)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (3,5), 6)
+#
+#
+#    board.fancy_board_print()
 
     #the perfect game
 #    board = Board()

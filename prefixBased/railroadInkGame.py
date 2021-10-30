@@ -92,7 +92,7 @@ if __name__ == "__main__":
         seeds = sorted([f for f in folder_contents if "Seed" in f])
         
         #we want to aggregate both the info csv and the score csv
-        for csvfile in [INFO_CSV]:
+        for csvfile in [INFO_CSV, SCORE_CSV]:
             data, stats = merge_statistics(player_name, seeds, csvfile)
             create_aggregate_csv(data, stats, seeds, f"{RESULTS_FOLDER}/{player_name}/{csvfile}")
     elif sys.argv[1] == "genpic":

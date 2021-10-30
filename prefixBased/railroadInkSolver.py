@@ -1474,7 +1474,6 @@ class RailroadInkSolver:
             
         #remove the tiles from the board
         for tile, square in played_tiles:
-            print("removing", tile, "at", square)
             self._board.remove_tile(square)
             
     """
@@ -1530,9 +1529,70 @@ def create_empty_folder(folder):
     
         
 if __name__ == "__main__":
-    #board = rulebook_game()
-    #dice_rolls = rulebook_dice_rolls()
-    #dice_rolls = [[DiceRoll({Piece.BASIC : 3, Piece.JUNCTION : 1},1)]]
+    board = rulebook_game()
+    dice_rolls = rulebook_dice_rolls()
+    
+    #print the starting board
+    board.fancy_board_print()
+    
+    #run the model for turn 7
+    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+    s.solve(print_output=True)
+    
+    #add the moves chosen to the board
+    for tile, square in s.get_moves_made()[(0,)]:
+        board.add_tile(tile, square, 7)
+    
+    #print the result
+    board.fancy_board_print()
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     #perfect game calculation
 #    board = Board()
@@ -1546,39 +1606,39 @@ if __name__ == "__main__":
 #    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", )
 #    s.solve(print_output=True, printD="all")
     
-    board = Board()
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (0,2), 1)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (0,3), 1)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.I),(0,4),1)
-    board.add_tile(Tile(Piece.CORNER_STATION,Rotation.R90,False),(0,1),1)
-    board.add_tile(Tile(Piece.OVERPASS,Rotation.I,False),(1,6),2)
-    board.add_tile(Tile(Piece.RAILWAY_T,Rotation.I,False),(1,5),2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R90,False),(2,6),2)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R180), (0,6), 2)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (5,0), 3)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (6,0), 3)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (1,4), 3)
-    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (6,1), 3)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (2,2), 4)
-    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (3,2), 4)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (2,3), 4)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (2,4), 4)
-    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R270), (3,3), 5)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (4,4), 5)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (6,3), 5)
-    board.add_tile(Tile(Piece.CORNER_JUNCTION, Rotation.I), (5,3), 5)
-    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (4,3), 5)
-    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,6), 6)
-    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (2,5), 6)
-    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 6)
-    board.add_tile(Tile(Piece.THREE_H_JUNCTION, Rotation.I), (0,5), 6)
-    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (3,5), 6)
-    
-    dice_rolls = [[DiceRoll({Piece.STRAIGHT_STATION : 1, Piece.RAILWAY_CORNER : 1, 
-                             Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1},1)]]
-                
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(print_output=True)
+#    board = Board()
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (0,2), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (0,3), 1)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.I),(0,4),1)
+#    board.add_tile(Tile(Piece.CORNER_STATION,Rotation.R90,False),(0,1),1)
+#    board.add_tile(Tile(Piece.OVERPASS,Rotation.I,False),(1,6),2)
+#    board.add_tile(Tile(Piece.RAILWAY_T,Rotation.I,False),(1,5),2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R90,False),(2,6),2)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R180), (0,6), 2)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (5,0), 3)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (6,0), 3)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (1,4), 3)
+#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (6,1), 3)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (2,2), 4)
+#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (3,2), 4)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (2,3), 4)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (2,4), 4)
+#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R270), (3,3), 5)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (4,4), 5)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (6,3), 5)
+#    board.add_tile(Tile(Piece.CORNER_JUNCTION, Rotation.I), (5,3), 5)
+#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (4,3), 5)
+#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,6), 6)
+#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (2,5), 6)
+#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 6)
+#    board.add_tile(Tile(Piece.THREE_H_JUNCTION, Rotation.I), (0,5), 6)
+#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (3,5), 6)
+#    
+#    dice_rolls = [[DiceRoll({Piece.STRAIGHT_STATION : 1, Piece.RAILWAY_CORNER : 1, 
+#                             Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1},1)]]
+#                
+#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+#    s.solve(print_output=True)
     
 #    board = Board()
 #    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.R270), (0,2), 1)
@@ -1699,3 +1759,7 @@ if __name__ == "__main__":
 #    #s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", internal_sinks=True)
 #    s = RailroadInkSolver(board, 6, dice_rolls, "expected-score", solution_count=5)
 #    s.solve(print_output=True)
+    
+    
+# DEMONSTRATION
+    

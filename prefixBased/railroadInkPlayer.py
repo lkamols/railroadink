@@ -25,7 +25,7 @@ BASE_CONFIG_NAME = "INITIAL"
 PLAYER_FOLDER = "players"
 BOARDS_FOLDER = "boards"
 
-REMOVE_FROM_KWARGS = ["rolls", "solvetime", "runtime", "cache"]
+REMOVE_FROM_KWARGS = ["rolls", "solvetime", "runtime", "cache", "this_special"]
 
 """
 Arguments in player files
@@ -83,7 +83,7 @@ def generate_game_roll():
 generates a full scenario of dice rolls given the rolls argument in the supplied file
 """
 def generate_scenario(start_roll, rolls):
-    dice_rolls = [[DiceRoll(start_roll, 1)]] #start with this dice roll
+    dice_rolls = [[start_roll]] #start with this dice roll
     for arg in rolls:
         #check if we have an integer (i.e randomly generate this tier with the given number of arguments)
         this_turn = []
@@ -141,6 +141,9 @@ class RailroadInkPlayer:
         self._game_seed = game_seed
         random.seed(game_seed) #seed the game
         self._scenario = scenario
+        
+        #generate the list of all the possible rolls for the next turn, done here to ensure it is only done once
+        self._all_rolls = DiceRoll.get_full_distribution()
       
     """
     read from a file a set of moves
@@ -148,7 +151,7 @@ class RailroadInkPlayer:
     """
     def _moves_from_file(self, file):
         moves = []
-        with open(folder, newline='') as movescsv:
+        with open(file, newline='') as movescsv:
             csvreader = csv.reader(movescsv, delimiter=",")
             for entry in csvreader:
                 #do a quick check that the row being read is an information row
@@ -212,7 +215,6 @@ class RailroadInkPlayer:
     def _timed_compare_moves(self, board, s, turn, print_output, runtime, start_time):
         #get the solutions which have been found
         solns = s.get_multiple_solutions()
-        print("1st", solns)
         move_results = []
         for soln in solns:
             for tile, square in soln:
@@ -244,13 +246,10 @@ class RailroadInkPlayer:
                 if math.isclose(move_results[move][game_index], winning_score):
                     win_probs[move] += self._all_rolls[game_index].get_probability()
         #determine the move which wins most often
-        print("2nd", solns)
         best_move = np.argmax(win_probs)
         self._evaluate_csv(move_results[best_move])
         #do some printing of the data used to get here (for sanity checks)
         self._comparison_csv(move_results)
-        print("best move", best_move)
-        print("best move moves", solns[best_move])
         return solns[best_move] #return the moves made in the best scenario        
     
     """
@@ -276,20 +275,10 @@ class RailroadInkPlayer:
         for arg in REMOVE_FROM_KWARGS:
             if arg in kwargs:
                 kwargs.pop(arg)
-                
-        print("BEFORE SOLVE")
-        for r in range(7):
-            for c in range(7):
-                print(r, c, board.get_piece_at((r,c)))
         
         #run the game
         s = RailroadInkSolver(board, turn, dice_rolls, **kwargs)
         s.solve(folder=folder, print_output=print_output)
-        
-        print("AFTER SOLVE")
-        for r in range(7):
-            for c in range(7):
-                print(r, c, board.get_piece_at((r,c)))
         
         #now check for if multiple solutions were generated and if so evaluate them
         if self._kwargs.get("solution_count", 1) > 1:
@@ -345,11 +334,6 @@ class RailroadInkPlayer:
         turn = turn_played + 1
         self._update_kwargs_dict(turn) #update the player decision making
         
-        #then generate all the possible different rolls that could occur for the turn after
-        #ensure this is only done once to avoid a lot of recalculation
-        if not hasattr(self, "_all_rolls"):
-            self._all_rolls = DiceRoll.get_full_distribution()
-        
         results = []
         for dice_roll in self._all_rolls:
             #determine the scenario tree for this solver
@@ -382,7 +366,7 @@ class RailroadInkPlayer:
     times and moves_made lists with the results
     returns the result if there was one, -1 otherwise
     """
-    def _check_for_existing_calculation(self, turn_folder, turn, times, moves_made):
+    def _check_for_existing_calculation(self, turn_folder, turn, board, times, moves_made):
         #check if we have already calculated this turn and if so, don't redo it
         if path.isfile(f"{RESULTS_FOLDER}/{turn_folder}/{INFO_CSV}"):
             #read in the time taken and result from the infocsv
@@ -409,7 +393,8 @@ class RailroadInkPlayer:
                         row = int(entry[3])
                         col = int(entry[4])
                         #append this to the moves made list
-                        moves_made.append((Tile(piece, rotation, flip), (row,col), turn))   
+                        moves_made.append((Tile(piece, rotation, flip), (row,col), turn)) 
+                        board.add_tile(Tile(piece, rotation, flip), (row,col), turn)
             return result #should be defined by now
         else:
             return -1
@@ -437,12 +422,12 @@ class RailroadInkPlayer:
             #work out where to save the run information to
             turn_folder = "{0}/Turn-{1}".format(self._call_folder, turn)
             
+            self._update_kwargs_dict(turn)
+            
             #check for if this has already been run
-            result = self._check_for_existing_calculation(turn_folder, turn, times, moves_made)
+            result = self._check_for_existing_calculation(turn_folder, turn, board, times, moves_made)
             if result  != -1: #if there was actually an existing solve, continue
                 continue
-            
-            self._update_kwargs_dict(turn)
             
             #solve the turn
             s = self._solve_turn(board, moves_made, rolls[turn-1], turn, turn_folder, print_output)
@@ -466,10 +451,13 @@ class RailroadInkPlayer:
     determines the dice rolls which will be used to call the solver
     """
     def _get_dice_rolls(self, roll):
+        start_roll = DiceRoll(roll, 1)
+        if "this_special" in self._kwargs and self._kwargs["this_special"] == False:
+            start_roll.set_specials(0)
         if "rolls" not in self._kwargs:
-            return [[DiceRoll(roll, 1)]]
+            return [[start_roll]]
         else:
-            return generate_scenario(roll, self._kwargs["rolls"])
+            return generate_scenario(start_roll, self._kwargs["rolls"])
     
     """
     updates the currently stored kwargs with the changes on the given turn
