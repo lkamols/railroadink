@@ -1,16 +1,21 @@
+"""
+file containing the underlying information for describing the state of a game of Railroad Ink
+Author: Luke Kamols
+"""
+
 from enum import Enum, IntEnum
 from dataclasses import dataclass
 from collections import Counter
 from PIL import Image, ImageDraw, ImageFont
 
+# some basic constants
 NUM_ROWS = 7
 NUM_COLS = 7
 NUM_SPECIALS = 3
 NUM_STARTS = 12
-
 LONGEST_POSSIBLE_PATH = 33
 
-#photo measurements to get the positioning correct
+# photo measurements to get the positioning correct
 TOP_OFFSET = 44
 LEFT_OFFSET = 30
 BOARD_WIDTH = 669
@@ -18,8 +23,10 @@ BOARD_HEIGHT = 669
 SQUARE_WIDTH = BOARD_WIDTH//NUM_COLS
 SQUARE_HEIGHT = BOARD_HEIGHT//NUM_ROWS
 
+# folder where all of the photos used for displaying a game are stored
 PHOTOS_FOLDER = "Railroad-Pictures/"
 
+# colours for displaying the different turns as different colours
 TURN_COLOURS = ["lightcoral", "cornflowerblue", "lightseagreen", "slateblue", "orchid", "palegreen", "orangered"]
 
 """
@@ -44,7 +51,7 @@ class EdgeType(IntEnum):
             raise ValueError("clashes only exist for highways and railways")
    
 """
-All the different possible pieces
+Enum for all the different possible pieces
 """
 class Piece(IntEnum):
     #basic pieces
@@ -195,6 +202,7 @@ class Tile:
         Piece.OVERPASS_HIGHWAY: (EdgeType.H, EdgeType.B, EdgeType.H, EdgeType.B)
         }
     
+    #the picture file associated with each tile
     _tile_pics = {
         Piece.RAILWAY_CORNER: "railway-corner.png",
         Piece.RAILWAY_T: "railway-t.png",
@@ -214,6 +222,7 @@ class Tile:
         Piece.CROSS_JUNCTION: "cross-junction.png",             
     }
     
+    #the number of variations of each tile and whether it can be reflected
     _tile_variations = {
         Piece.RAILWAY_CORNER: (4, False),
         Piece.RAILWAY_T: (4, False),
@@ -298,6 +307,7 @@ class Tile:
         if piece == Piece.SPECIAL:
             variations = []
             for piece in SPECIAL_PIECES:
+                #recursive calls will always be in the else case
                 variations += Tile.get_variations(piece)
         elif piece == Piece.BASIC:
             variations = []
@@ -331,9 +341,9 @@ class Tile:
     
     """
     determine how many ends of the tile are on internal edges of the board if placed at position s
-    loose ends are only counted on the right and bottom edges, so they aren't double counted
     """
     def loose_ends(self, s):
+        #consider each direction separately
         count = 0
         if self.get_edge_type_on_side(Side.TOP) != EdgeType.B and s[0] > 0:
             count += 1
@@ -366,7 +376,7 @@ class Tile:
         return self._piece == Piece.OVERPASS
     
     """
-    override the equality function to treat two Tiles with the same value the same
+    override the equality function to treat two Tiles with the same value as the same
     """
     def __eq__(self, obj):
         if not isinstance(obj, Tile):
@@ -394,23 +404,32 @@ A class for all the information about a given state of play
 """
 class Board:
 
-    
     """
     Constructor.
     Creates an empty board with no tiles in it
     """
     def __init__(self):
+        self._turn = {} #the turn which a piece was placed on
         #create an empty board with no tiles in it yet
         self._board = {}
-        self._turn = {} #the turn which a piece was placed on
         for row in range(NUM_ROWS):
             for col in range(NUM_COLS):
+                #use a blank piece to signify that the square is empty
                 self._board[row,col] = Tile(Piece.BLANK, Rotation.I)
         self._initialise_start_tiles()
         self._specials_used = set()
         #cluster initialisers
         self._clusters_up_to_date = False
         self._cluster_reps = None
+        
+    """
+    initialise all the start pieces
+    """
+    def _initialise_start_tiles(self):
+        for row, col, rotation in RAILWAY_START_POSITIONS:
+            self._board[row,col] = Tile(Piece.START_RAILWAY, rotation)
+        for row, col, rotation in HIGHWAY_START_POSITIONS:
+            self._board[row,col] = Tile(Piece.START_HIGHWAY, rotation)
       
     """
     add a tile to the board at the given square
@@ -419,6 +438,7 @@ class Board:
     def add_tile(self, tile, square, turn=-1):
         self._board[square] = tile
         self._turn[square] = turn
+        #store any special pieces to know which ones are left
         if tile.get_piece() in SPECIAL_PIECES:
             self._specials_used.add(tile.get_piece())
         self._clusters_up_to_date = False
@@ -435,17 +455,8 @@ class Board:
         self._clusters_up_to_date = False
         
     """
-    initialise all the start pieces
-    """
-    def _initialise_start_tiles(self):
-        for row, col, rotation in RAILWAY_START_POSITIONS:
-            self._board[row,col] = Tile(Piece.START_RAILWAY, rotation)
-        for row, col, rotation in HIGHWAY_START_POSITIONS:
-            self._board[row,col] = Tile(Piece.START_HIGHWAY, rotation)
-        
-    """
     creates an image corresponding to the board,
-    file - the location to store the new image, if the file is None, displays it
+    file - the location to store the new image, if the file is None, displays it directly rather than saving it
     """
     def fancy_board_print(self, file=None):
         #create a new image with the board in the background
@@ -508,6 +519,38 @@ class Board:
         for square in original_board._board:
             copy.add_tile(original_board.get_tile_at(square), square, original_board._turn.get(square,-1))
         return copy
+    
+    """
+    return all the (r,c) pairs of pieces adjacent to the given square
+    if internal is true, it is limited to internal pieces
+    if forward is true, only squares to the right or below are considered
+    """
+    def adjacents(self, s, internal=False, forward=False):
+        directions = [(0,1),(1,0)]
+        if not forward:
+            directions += [(-1,0),(0,-1)]
+        if internal:
+            return [(s[0]+dr,s[1]+dc) for (dr,dc) in directions
+                    if Board.square_internal(s[0]+dr, s[1]+dc)]
+        else:
+            return [(s[0]+dr,s[1]+dc) for (dr,dc) in directions
+                if (s[0]+dr,s[1]+dc) in self._board]  
+        
+    """
+    return list of (square, side) pairs with all the adjacent squares
+    where side is the side of this square
+    """
+    def adjacents_with_sides(self, s, internal=False, forward=False):
+        adjacents = []
+        for side in Side:
+            oppS, _ = self.opposite_edge(s, side)
+            if internal and Board.s_internal(oppS):
+                adjacents += [(oppS, side)]
+            if not internal and oppS in self._board:
+                adjacents += [(oppS, side)]
+        return adjacents
+    
+    #GETTERS
         
     def get_tile_at(self, s):
         return self._board.get(s, None)
@@ -524,36 +567,6 @@ class Board:
     def count_specials_used(self):
         return len(self._specials_used)
     
-    """
-    return all the (r,c) pairs of pieces adjacent to the given square
-    if internal is true, it is limited to internal pieces
-    if forward is true, only squares to the right or below are considered
-    """
-    def adjacents(self, s, internal=False, forward=False):
-        directions = [(0,1),(1,0)]
-        if not forward:
-            directions += [(-1,0),(0,-1)]
-        if internal:
-            return [(s[0]+dr,s[1]+dc) for (dr,dc) in directions
-                    if Board.square_internal(s[0]+dr, s[1]+dc)]
-        else:
-            return [(s[0]+dr,s[1]+dc) for (dr,dc) in directions
-                if (s[0]+dr,s[1]+dc) in self._board]
-      
-    """
-    return list of (square, side) pairs with all the adjacent squares
-    where side is the side of this square
-    """
-    def adjacents_with_sides(self, s, internal=False, forward=False):
-        adjacents = []
-        for side in Side:
-            oppS, _ = self.opposite_edge(s, side)
-            if internal and Board.s_internal(oppS):
-                adjacents += [(oppS, side)]
-            if not internal and oppS in self._board:
-                adjacents += [(oppS, side)]
-        return adjacents
-    
     @staticmethod
     def get_start_squares():
         return {(r,c) for r,c,t in HIGHWAY_START_POSITIONS + RAILWAY_START_POSITIONS}
@@ -567,8 +580,8 @@ class Board:
         return Board.square_internal(s[0],s[1])
     
     
-    
     ###################CLUSTERING LOGIC###########################
+    
     """
     create a cluster for each of the squares on the board
     """       
@@ -617,9 +630,12 @@ class Board:
     """                       
     def _get_cluster_representatives(self, clusters):
         cluster_reps = []
+        #iterate through all squares, this is a nicer ordering than going through a dictionary
         for row in range(-1, NUM_ROWS+1):
             for col in range(-1, NUM_COLS+1):
                 if self.get_tile_at((row,col)) != None:
+                    #this is just a for loop for dealing with overpasses being two separate pieces
+                    #will almost always just be one element
                     for cluster in clusters[row,col]:
                         if cluster.is_representative():
                             cluster_reps += [cluster]
@@ -664,6 +680,7 @@ class Board:
     
     """
     finds and stores the list of all free squares on the board
+    free squares are squares without pieces, that aren't blocked off
     """
     def _determine_free_squares(self):
         self._free_squares = []
@@ -729,6 +746,7 @@ class Board:
     visited considers the set of move sets that have already been considered
     """
     def possible_moves(self, move_list, pieces, variations, edges, free_squares, all_moves, visited):
+        #yes this function is pretty gross, at least it's not recursive....oh wait
         
         #only consider move combinations we have not seen before
         move_tuple = tuple(sorted(move_list))
@@ -948,6 +966,8 @@ class Board:
         #remove from the visited set once all recursive calls have been made
         visited.remove(square)        
         return max_depth
+    
+    
 """
 A cluster of adjoining pieces in the form of a disjoint set, 
 stores all the information about the cluster in the top level element in the disjoint set
@@ -1234,7 +1254,7 @@ class DiceRoll:
         return "({0}, {1})".format(self._dice, self._probability)
 
 """
-create the board for the game shown in the rulebook
+create the board for the game shown in the rulebook, not including turn 7
 """
 def rulebook_game():
     board = Board()
@@ -1272,100 +1292,52 @@ the pieces available on the last turn of the default game, pass it the board for
 def rulebook_dice_rolls():
     return [[DiceRoll({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1, 
             Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}, 1)]]
+        
+"""
+create the board associated with the perfect game, the perfect game model doesn't work out
+an ordering, this was done manually as it only needed to be done once
+"""
+def perfect_game():
+    board = Board()
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R90), (0,1), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (0,2), 2)  
+    board.add_tile(Tile(Piece.CROSS_JUNCTION, Rotation.R90), (0,3), 2)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (0,4), 1)  
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (0,5), 1)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R180), (0,6), 1)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (1,0), 3)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 2)
+    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (1,2), 2)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90), (1,6), 1)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.R90), (2,0), 3)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (2,1), 3) 
+    board.add_tile(Tile(Piece.CORNER_JUNCTION, Rotation.R270), (2,2), 3)
+    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (2,3), 3)
+    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R270), (3,0), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (3,2), 4)
+    board.add_tile(Tile(Piece.OVERPASS, Rotation.R90), (3,3), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,4), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,5), 4)
+    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R180), (3,6), 5) 
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R270), (4,0), 5)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (4,3), 5)
+    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,6), 6)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (5,0), 6)
+    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (5,1), 6)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 7)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90), (5,6), 5)
+    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 6)
+    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 7)
+    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 7)
+    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270), (6,5), 7)
+    return board
+    
 
 if __name__ == "__main__":
-    
-    dice = DiceRoll.get_full_distribution()
-    for i, d in enumerate(dice):
-        print(i, d)
+    #some examples for using this file
 
     #board = rulebook_game()
-    #board = Board()
     #board.fancy_board_print("turn-6.png")
-    #reps = board.find_clusters()
-    #print(board.score())
-#    moves = board.all_possible_moves({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
-#                                      Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1})
-#    print(board.best_move({Piece.RAILWAY_STRAIGHT : 1, Piece.RAILWAY_CORNER : 1,
-#                           Piece.HIGHWAY_STRAIGHT : 1, Piece.OVERPASS : 1}))
-    
-#    board = Board()
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R270), (1,0),1)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (0,0), 1)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (6,5), 1)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.I, flip=True), (0,1), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,6), 2)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (5,6), 2)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 2)
-#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,5), 2)
-    
-    #board.fancy_board_print()
-#    a = board.all_possible_moves({Piece.STRAIGHT_STATION : 1, Piece.RAILWAY_CORNER : 1, 
-#                             Piece.RAILWAY_T : 1, Piece.HIGHWAY_T : 1}, include_specials=False)
-    
-#    board = Board()
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT,Rotation.R90), (0,2), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (0,3), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER,Rotation.I),(0,4),1)
-#    board.add_tile(Tile(Piece.CORNER_STATION,Rotation.R90,False),(0,1),1)
-#    board.add_tile(Tile(Piece.OVERPASS,Rotation.I,False),(1,6),2)
-#    board.add_tile(Tile(Piece.RAILWAY_T,Rotation.I,False),(1,5),2)
-#    board.add_tile(Tile(Piece.HIGHWAY_CORNER,Rotation.R90,False),(2,6),2)
-#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R180), (0,6), 2)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (5,0), 3)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (6,0), 3)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (1,4), 3)
-#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R270), (6,1), 3)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R180), (2,2), 4)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90, True), (3,2), 4)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (2,3), 4)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (2,4), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R270), (3,3), 5)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (4,4), 5)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (6,3), 5)
-#    board.add_tile(Tile(Piece.CORNER_JUNCTION, Rotation.I), (5,3), 5)
-#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (4,3), 5)
-#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (5,6), 6)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (2,5), 6)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (5,4), 6)
-#    board.add_tile(Tile(Piece.THREE_H_JUNCTION, Rotation.I), (0,5), 6)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (3,5), 6)
-#
-#
-#    board.fancy_board_print()
-
-    #the perfect game
-#    board = Board()
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R90), (0,1), 2)
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (0,2), 2)  
-#    board.add_tile(Tile(Piece.CROSS_JUNCTION, Rotation.R90), (0,3), 2)
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (0,4), 1)  
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (0,5), 1)
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R180), (0,6), 1)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R180), (1,0), 3)
-#    board.add_tile(Tile(Piece.OVERPASS, Rotation.I), (1,1), 2)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (1,2), 2)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90), (1,6), 1)
-#    board.add_tile(Tile(Piece.OVERPASS, Rotation.R90), (2,0), 3)
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.I), (2,1), 3) 
-#    board.add_tile(Tile(Piece.CORNER_JUNCTION, Rotation.R270), (2,2), 3)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (2,3), 3)
-#    board.add_tile(Tile(Piece.THREE_R_JUNCTION, Rotation.R270), (3,0), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_CORNER, Rotation.R90), (3,2), 4)
-#    board.add_tile(Tile(Piece.OVERPASS, Rotation.R90), (3,3), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,4), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.R90), (3,5), 4)
-#    board.add_tile(Tile(Piece.HIGHWAY_T, Rotation.R180), (3,6), 5) 
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R270), (4,0), 5)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (4,3), 5)
-#    board.add_tile(Tile(Piece.HIGHWAY_STRAIGHT, Rotation.I), (4,6), 6)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.I), (5,0), 6)
-#    board.add_tile(Tile(Piece.RAILWAY_CORNER, Rotation.R270), (5,1), 6)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.I), (5,3), 7)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R90), (5,6), 5)
-#    board.add_tile(Tile(Piece.STRAIGHT_STATION, Rotation.I), (6,1), 6)
-#    board.add_tile(Tile(Piece.RAILWAY_T, Rotation.R90), (6,3), 7)
-#    board.add_tile(Tile(Piece.RAILWAY_STRAIGHT, Rotation.R90), (6,4), 7)
-#    board.add_tile(Tile(Piece.CORNER_STATION, Rotation.R270), (6,5), 7)
-#    
-#    board.fancy_board_print("the-perfect-game.png")
+        
+    #board = perfect_game()
+    #board.fancy_board_print("the-perfect-game.png")
