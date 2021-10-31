@@ -1,5 +1,7 @@
-#author Luke Kamols
-#this file is purely used for command line calls to the railroad ink player
+"""
+top level file for command line arguments which use the railroadInkPlayer file
+Author: Luke Kamols
+"""
 
 import sys
 import os
@@ -11,6 +13,7 @@ from board import Board, Piece, Rotation, Tile, DiceRoll
 from railroadInkSolver import RESULTS_FOLDER
 from railroadInkPlayer import RailroadInkPlayer, INFO_CSV, SCORE_CSV, MOVES_CSV, EVALUATE_CSV, PHOTO_FILENAME
 
+#the name of the file used to compare solvers with each other
 COMPARE_CSV = "compare.csv"
 
 """
@@ -119,7 +122,8 @@ if __name__ == "__main__":
     elif sys.argv[1] == "compare":
         #use: compare scenario {players}
         #compares all players for the given scenario and determines the likelihood of them winning
-        #every single seed
+        #every single seed and the expected wins over many games
+        #if {players} is empty, compares all given players
         
         #start by getting the path to the directory being compared
         folder = f"{RESULTS_FOLDER}/{sys.argv[2]}"
@@ -127,9 +131,12 @@ if __name__ == "__main__":
             players = sys.argv[3:]
         else:
             players = os.listdir(folder)
+            
         #use all of the seeds in the folder of the first player
-        seeds = os.listdir(f"{folder}/{players[0]}")
-        seeds.sort() #put these in order
+        files = os.listdir(f"{folder}/{players[0]}")
+        #remove any that don't start with "Seed"
+        seeds = [file for file in files if "Seed" in file]
+        seeds.sort() #put these in order, this puts them in order 1,10,100,2 but it's consistent which is all that matters
         
         #get all of the possible dice rolls for determining probabilities
         dice_rolls = DiceRoll.get_full_distribution()
@@ -155,8 +162,8 @@ if __name__ == "__main__":
                     else:
                         #if the file doesn't exist, just make -1 values as flags
                         scores[player] = [-1]*len(dice_rolls)
+                        
                 #now we need to calculate the win probabilities
-                
                 win_probs = {player : 0 for player in players} #start all at zero
                 for game_index in range(len(dice_rolls)):
                     #get the winning score

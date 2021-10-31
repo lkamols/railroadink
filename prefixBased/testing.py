@@ -1,3 +1,9 @@
+"""
+file containing some tests for the constructed MILP
+this was used to test whether additions broke the original functionality, was not developed too heavily
+Author: Luke Kamols
+"""
+
 from board import Board, Tile, Piece, Rotation, DiceRoll, rulebook_game, rulebook_dice_rolls
 from railroadInkSolver import RailroadInkSolver, RESULTS_FOLDER
 
@@ -17,6 +23,7 @@ time tracking of each operation and aggregation of times done
 class TestingSuite:
     
     def __init__(self):
+        #all of the tests that have been written
         self._tests = [self.test_rulebook, 
                        self.test_no_special_play,
                        self.test_three_max,
@@ -39,7 +46,6 @@ class TestingSuite:
             pass #if the folder wasn't there, we don't mind
         os.makedirs(RESULTS_FOLDER + "/" + TESTING_FOLDER)
         
-        
         if seed != None:
             random.seed(seed)
         passes = 0
@@ -47,8 +53,11 @@ class TestingSuite:
         with open(test_results_path, mode="w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=",")
             csv_writer.writerow(["Test", "Passed", "Gave", "Gmin", "Gmax", "Aave", "Amin", "Amax"])
+            #go through each of the test functions
             for test in self._tests:
+                #run the test
                 name, success, gurobi_times, absolute_times = test(trials, seed)
+                #print some information about the trial
                 print("\tOptimisation Times")
                 print("\t\tave: {0:.2f} min: {1:.2f}, max: {2:.2f}".
                       format(gurobi_times[0], gurobi_times[1], gurobi_times[2]))
@@ -57,6 +66,7 @@ class TestingSuite:
                       format(absolute_times[0], absolute_times[1], absolute_times[2]))
                 passes += (1 if success else 0)
                 csv_writer.writerow([name, "PASSED" if success else "FAILED"] + gurobi_times + absolute_times)
+            #print the overall results
             print("{0}/{1} TESTS PASSED".format(passes, len(self._tests)))
     
     """
@@ -321,10 +331,7 @@ class TestingSuite:
         
 
 if __name__ == "__main__":
-    #unittest.main(exit=False)
-    
-#    tester = TestSolver()
-#    tester.test_six_loop()
-#    print(TestingSuite.test_rulebook(1,4))
+
+    #create a testing suite and test all the problems with 3 different seeds
     t = TestingSuite()
     t.run_all_tests(3)

@@ -1339,5 +1339,5 @@ if __name__ == "__main__":
     #board = rulebook_game()
     #board.fancy_board_print("turn-6.png")
         
-    #board = perfect_game()
-    #board.fancy_board_print("the-perfect-game.png")
+    board = perfect_game()
+    board.fancy_board_print("the-perfect-game.png")

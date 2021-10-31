@@ -1,3 +1,8 @@
+"""
+file containing components for using the Railroad Ink solver from configuration files
+Author: Luke Kamols
+"""
+
 from railroadInkSolver import RailroadInkSolver, RESULTS_FOLDER, create_empty_folder, DECISIONS_CSV
 from board import Board, Tile, Piece, Rotation, DiceRoll, BASIC_PIECES, JUNCTION_PIECES
 import random
@@ -10,9 +15,10 @@ import func_timeout
 import os.path
 from os import path
 
+#the number of turns in a game of Railroad Ink
 TURNS = 7
-PHOTO_FILENAME = "solution.png"
 
+PHOTO_FILENAME = "solution.png"
 SCORE_CSV = "score.csv"
 INFO_CSV = "info.csv"
 MOVES_CSV = "moves.csv"
@@ -20,19 +26,28 @@ EVALUATE_CSV = "evaluation.csv"
 COMPARISON_CSV = "comparison.csv"
 ERROR_FILE = "MISMATCH.txt"
 
+#the base configuration to use in configuration files
 BASE_CONFIG_NAME = "INITIAL"
 
 PLAYER_FOLDER = "players"
 BOARDS_FOLDER = "boards"
 
-REMOVE_FROM_KWARGS = ["rolls", "solvetime", "runtime", "cache", "this_special"]
+#arguments that can be provided to this level that are not arguments for the underlying solver
+#in railroadInkSolver, they must be removed from the kwargs before being passed along
+REMOVE_FROM_KWARGS = ["rolls", "solvetime", "runtime", "this_special"]
 
 """
-Arguments in player files
-All arguments to the RailroadInkSolver init function
-rolls - defines the types of rolls to consider
-runtime/solvetime - the total runtime and the portion of this allocated to solving the model
+ARGUMENTS THAT CAN BE PUT IN CONFIGURATION FILES
+these can be provided to INITIAL, TURN 1, TURN 2, ... TURN 7, with new arguments overriding old when
+    moving through the turns.
+Arguments:
+        - All arguments to the RailroadInkSolver init function
+        - rolls - defines the types of rolls to consider, this is a list of the rolls to consider
+                on all turns after this one. If a number is given for a turn, then random rolls are
+                generated, otherwise specific rolls can be added
+        - runtime/solvetime - the total runtime and the portion of this allocated to solving the model
         for the case that we are using the solve/evaluate approach for determining the best move
+        - this_special - whether to allow a special piece to be played on this turn
 """
 
 """
@@ -156,13 +171,14 @@ class RailroadInkPlayer:
             for entry in csvreader:
                 #do a quick check that the row being read is an information row
                 if "Piece." in entry[0]:
-                    #first unpack
+                    #first unpack all of the entries
                     piece = Piece[entry[0].split(".")[1]]
                     rotation = Rotation[entry[1].split(".")[1]]
                     flip = entry[2] == "True"
                     row = int(entry[3])
                     col = int(entry[4])
                     turn = int(entry[5])
+                    #then append this to the moves that have been made
                     moves.append((Tile(piece, rotation, flip), (row,col), turn))
         return moves
     
@@ -535,6 +551,8 @@ class RailroadInkPlayer:
     
 if __name__ == "__main__":
     
-    p = RailroadInkPlayer("greedy-delayed-specials", 42)
+    #example use, using the fake-connections player, this loads the configuration of the player from
+    #the players/fake-connections.txt file and then plays a full game given that configuration
+    p = RailroadInkPlayer("fake-connections", 42)
     p.play_game(print_pictures=True, print_output=True)
     
