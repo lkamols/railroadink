@@ -1,0 +1,33 @@
+{
+	"INITIAL": {
+		"objective" : "expected-score",
+		"specials" : false,
+		"fake_connections" : true,
+		"fake_connections_cost" : [0.6, 0.6, 0.8, 1, 1.5, 2.5, 4],
+		"fake_connections_max" : [6, 8, 16, 16, 12, 6, 0],
+		"timeouts" : [21600, 21600, 21600, 21600, 21600, 21600, 21600]
+	},
+	"TURN 5": {
+		"specials" : true
+	},
+	"TURN 6" : {
+		"fake_connections" : false,
+		"specials" : true,
+		"solvetime" : 3600,
+		"runtime" : 7200,
+		"piece_cap" : 1,
+		"rolls" : [
+				[
+					[{"BASIC" : 3, "JUNCTION" : 1}, 0.5],
+					[{"BASIC" : 3, "JUNCTION" : 1}, 0.5]
+				]
+			]
+	},
+	"TURN 7" : {
+		"specials" : true,
+		"piece_cap" : -1,
+		"solvetime" : 0,
+		"runtime" : 0,
+		"rolls" : []
+	}
+}
