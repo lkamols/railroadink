@@ -1,0 +1,51 @@
+
+Gurobi 9.1.2 (linux64) logging started Thu Aug 12 20:51:15 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-6/greedy/Seed-70/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 20 physical cores, 20 logical processors, using up to 20 threads
+Optimize a model with 16772 rows, 14282 columns and 422089 nonzeros
+Model fingerprint: 0x9be07440
+Variable types: 6289 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 11788 rows and 10160 columns
+Presolve time: 0.23s
+Presolved: 4984 rows, 4122 columns, 28007 nonzeros
+Variable types: 3098 continuous, 1024 integer (1024 binary)
+
+Root relaxation: objective 4.257878e+01, 2383 iterations, 0.25 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   42.57878    0  274          -   42.57878      -     -    0s
+     0     0   42.45036    0  268          -   42.45036      -     -    0s
+     0     0   42.44395    0  257          -   42.44395      -     -    0s
+     0     0   42.44395    0  257          -   42.44395      -     -    0s
+     0     0   42.44395    0  257          -   42.44395      -     -    0s
+     0     0   42.44395    0  257          -   42.44395      -     -    1s
+     0     0   42.44395    0  257          -   42.44395      -     -    1s
+     0     0   42.44395    0  257          -   42.44395      -     -    1s
+     0     0   42.44395    0  257          -   42.44395      -     -    1s
+H    0     0                      39.0000000   42.44395  8.83%     -    1s
+     0     2   42.44395    0  257   39.00000   42.44395  8.83%     -    1s
+
+Cutting planes:
+  MIR: 3
+  Flow cover: 22
+  Zero half: 3
+
+Explored 41 nodes (10017 simplex iterations) in 2.85 seconds
+Thread count was 20 (of 20 available processors)
+
+Solution count 1: 39 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 3.900000000000e+01, best bound 3.900000000000e+01, gap 0.0000%
+
+User-callback calls 579, time in user-callback 0.02 sec

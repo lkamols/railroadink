@@ -1,0 +1,46 @@
+
+Gurobi 9.1.2 (linux64) logging started Tue Oct 12 18:45:44 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/perfect-look-ahead/Seed-90/Turn-7/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 16 physical cores, 16 logical processors, using up to 16 threads
+Optimize a model with 16773 rows, 14283 columns and 421881 nonzeros
+Model fingerprint: 0x30e0524d
+Variable types: 6290 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 13058 rows and 11208 columns
+Presolve time: 0.24s
+Presolved: 3715 rows, 3075 columns, 17089 nonzeros
+Variable types: 2341 continuous, 734 integer (733 binary)
+
+Root relaxation: objective 6.192188e+01, 692 iterations, 0.02 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   61.92188    0   80          -   61.92188      -     -    0s
+H    0     0                      60.0000000   61.92188  3.20%     -    0s
+     0     0     cutoff    0        60.00000   60.00000  0.00%     -    0s
+
+Cutting planes:
+  Cover: 1
+  MIR: 5
+  Flow cover: 4
+  Zero half: 2
+  Network: 1
+  RLT: 1
+
+Explored 1 nodes (760 simplex iterations) in 0.32 seconds
+Thread count was 16 (of 16 available processors)
+
+Solution count 1: 60 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 6.000000000000e+01, best bound 6.000000000000e+01, gap 0.0000%
+
+User-callback calls 143, time in user-callback 0.01 sec

@@ -1,0 +1,51 @@
+
+Gurobi 9.1.2 (linux64) logging started Sat Oct  9 23:36:42 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/fake-connections/Seed-9/Turn-5/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 16 physical cores, 16 logical processors, using up to 16 threads
+Optimize a model with 17158 rows, 14667 columns and 468381 nonzeros
+Model fingerprint: 0xb8f301e2
+Variable types: 6290 continuous, 8377 integer (8377 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 1e+01]
+Presolve removed 11212 rows and 9712 columns
+Presolve time: 0.34s
+Presolved: 5946 rows, 4955 columns, 39675 nonzeros
+Variable types: 3541 continuous, 1414 integer (1413 binary)
+
+Root relaxation: objective 5.279821e+01, 2928 iterations, 0.23 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   52.79821    0  351          -   52.79821      -     -    0s
+     0     0   51.54519    0  322          -   51.54519      -     -    1s
+     0     0   51.54519    0  331          -   51.54519      -     -    1s
+     0     0   51.49185    0  302          -   51.49185      -     -    1s
+     0     0   51.49185    0  302          -   51.49185      -     -    1s
+     0     0   51.49185    0  302          -   51.49185      -     -    1s
+     0     0   51.49185    0  302          -   51.49185      -     -    1s
+     0     2   51.49185    0  302          -   51.49185      -     -    1s
+*   26    30               4      48.0000000   50.58540  5.39%   477    3s
+
+Cutting planes:
+  MIR: 1
+  Flow cover: 22
+  GUB cover: 2
+  Zero half: 4
+  Lazy constraints: 2
+
+Explored 101 nodes (27753 simplex iterations) in 4.48 seconds
+Thread count was 16 (of 16 available processors)
+
+Solution count 1: 48 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 4.800000000000e+01, best bound 4.800000000000e+01, gap 0.0000%
+
+User-callback calls 803, time in user-callback 0.11 sec

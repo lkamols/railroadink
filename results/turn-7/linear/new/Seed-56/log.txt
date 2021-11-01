@@ -1,0 +1,54 @@
+
+Gurobi 9.1.2 (linux64) logging started Mon Aug 30 14:58:16 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-7/linear/new/Seed-56/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 28 physical cores, 28 logical processors, using up to 28 threads
+Optimize a model with 16773 rows, 14283 columns and 421881 nonzeros
+Model fingerprint: 0x8c532062
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+
+Concurrent LP optimizer: primal simplex, dual simplex, and barrier
+Showing barrier log only...
+
+Presolve removed 12054 rows and 10595 columns
+Presolve time: 0.08s
+Presolved: 4719 rows, 3688 columns, 32840 nonzeros
+
+Ordering time: 0.09s
+
+Barrier statistics:
+ AA' NZ     : 1.237e+05
+ Factor NZ  : 4.174e+05 (roughly 7 MBytes of memory)
+ Factor Ops : 6.708e+07 (less than 1 second per iteration)
+ Threads    : 26
+
+                  Objective                Residual
+Iter       Primal          Dual         Primal    Dual     Compl     Time
+   0   4.29445681e+01  2.31760212e+04  1.92e+03 3.21e+00  6.73e+01     0s
+   1   5.71658641e+02  2.31985386e+04  1.41e+03 5.08e+00  5.12e+01     0s
+   2   4.71550226e+02  2.53805451e+04  5.48e+02 4.26e-14  2.03e+01     0s
+   3   1.33481875e+02  1.62179339e+04  8.83e+01 2.56e-13  3.90e+00     0s
+   4   8.37443499e+01  8.88201608e+03  4.20e+01 2.42e-13  1.75e+00     0s
+   5   5.86106738e+01  7.05997288e+03  2.37e+01 2.42e-13  1.14e+00     0s
+   6   5.31499475e+01  5.20057985e+03  1.96e+01 1.63e-13  8.44e-01     0s
+   7   3.87101732e+01  3.52685213e+03  8.52e+00 1.46e-13  4.59e-01     0s
+   8   3.36498445e+01  2.14574457e+03  4.24e+00 1.40e-13  2.44e-01     0s
+   9   3.23644573e+01  9.27010367e+02  8.56e-01 1.15e-13  8.75e-02     0s
+  10   3.81355536e+01  2.51323868e+02  3.25e-01 8.26e-14  2.02e-02     0s
+  11   4.36210519e+01  1.47834049e+02  1.44e-01 2.47e-14  9.69e-03     0s
+
+Barrier performed 11 iterations in 0.44 seconds
+Barrier solve interrupted - model solved by another algorithm
+
+
+Solved with dual simplex
+Solved in 1652 iterations and 0.45 seconds
+Optimal objective  5.683106842e+01
+
+User-callback calls 146, time in user-callback 0.00 sec

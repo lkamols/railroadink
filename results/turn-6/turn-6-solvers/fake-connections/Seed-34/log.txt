@@ -1,0 +1,44 @@
+
+Gurobi 9.1.2 (linux64) logging started Fri Aug 13 00:02:11 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-6/fake-connections/Seed-34/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 28 physical cores, 56 logical processors, using up to 28 threads
+Optimize a model with 17150 rows, 14666 columns and 463797 nonzeros
+Model fingerprint: 0xcbf7b4c0
+Variable types: 6289 continuous, 8377 integer (8377 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 2e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 6e+00]
+Presolve removed 13406 rows and 11612 columns
+Presolve time: 0.33s
+Presolved: 3744 rows, 3054 columns, 13297 nonzeros
+Variable types: 2268 continuous, 786 integer (786 binary)
+
+Root relaxation: objective 4.195068e+01, 1476 iterations, 0.09 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   41.95068    0  267          -   41.95068      -     -    0s
+     0     0   41.58391    0  285          -   41.58391      -     -    0s
+*    0     0               0      41.5000000   41.50000  0.00%     -    0s
+
+Cutting planes:
+  Flow cover: 26
+  Zero half: 12
+  RLT: 5
+  Lazy constraints: 4
+
+Explored 1 nodes (1784 simplex iterations) in 0.78 seconds
+Thread count was 28 (of 56 available processors)
+
+Solution count 1: 41.5 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 4.150000000000e+01, best bound 4.150000000000e+01, gap 0.0000%
+
+User-callback calls 262, time in user-callback 0.15 sec

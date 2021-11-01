@@ -1,0 +1,51 @@
+
+Gurobi 9.1.2 (linux64) logging started Thu Oct 14 22:39:14 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/perfect-look-ahead/Seed-28/Turn-7/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 20 physical cores, 20 logical processors, using up to 20 threads
+Optimize a model with 16773 rows, 14283 columns and 421881 nonzeros
+Model fingerprint: 0x4b2374c8
+Variable types: 6290 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 12356 rows and 10651 columns
+Presolve time: 0.22s
+Presolved: 4417 rows, 3632 columns, 21960 nonzeros
+Variable types: 2797 continuous, 835 integer (834 binary)
+
+Root relaxation: objective 6.782792e+01, 1347 iterations, 0.10 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   67.82792    0   90          -   67.82792      -     -    0s
+H    0     0                      52.0000000   67.82792  30.4%     -    0s
+     0     0   66.92000    0  115   52.00000   66.92000  28.7%     -    0s
+     0     0   66.79420    0  127   52.00000   66.79420  28.5%     -    0s
+     0     0   66.79310    0  126   52.00000   66.79310  28.4%     -    0s
+     0     0   66.79310    0  126   52.00000   66.79310  28.4%     -    0s
+     0     0   66.79310    0  125   52.00000   66.79310  28.4%     -    0s
+H    0     0                      53.0000000   66.79310  26.0%     -    0s
+     0     2   66.79310    0  125   53.00000   66.79310  26.0%     -    0s
+*   18    26               4      62.0000000   65.52551  5.69%   111    1s
+
+Cutting planes:
+  MIR: 4
+  Flow cover: 7
+  GUB cover: 1
+  Zero half: 15
+
+Explored 52 nodes (5526 simplex iterations) in 1.33 seconds
+Thread count was 20 (of 20 available processors)
+
+Solution count 3: 62 53 52 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 6.200000000000e+01, best bound 6.200000000000e+01, gap 0.0000%
+
+User-callback calls 410, time in user-callback 0.05 sec

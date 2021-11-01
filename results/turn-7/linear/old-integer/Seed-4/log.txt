@@ -1,0 +1,85 @@
+
+Gurobi 9.1.2 (linux64) logging started Sun Oct 31 21:57:46 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-7/linear/old-integer/Seed-4/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 36 physical cores, 36 logical processors, using up to 32 threads
+Optimize a model with 9233 rows, 8861 columns and 342633 nonzeros
+Model fingerprint: 0x5dc6c257
+Variable types: 832 continuous, 8029 integer (8029 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+01]
+  RHS range        [1e+00, 5e+01]
+Presolve removed 7834 rows and 7460 columns
+Presolve time: 0.19s
+Presolved: 1399 rows, 1401 columns, 13389 nonzeros
+Variable types: 415 continuous, 986 integer (984 binary)
+
+Root relaxation: objective 7.308065e+01, 775 iterations, 0.01 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   73.08065    0   36          -   73.08065      -     -    0s
+     0     0   64.16885    0  167          -   64.16885      -     -    0s
+     0     0   60.66789    0  168          -   60.66789      -     -    0s
+     0     0   60.61047    0  221          -   60.61047      -     -    0s
+     0     0   60.61023    0  186          -   60.61023      -     -    0s
+     0     0   59.55218    0  265          -   59.55218      -     -    0s
+     0     0   59.36341    0  165          -   59.36341      -     -    0s
+     0     0   59.29466    0  160          -   59.29466      -     -    0s
+     0     0   59.29139    0  154          -   59.29139      -     -    0s
+     0     0   58.78332    0  303          -   58.78332      -     -    0s
+     0     0   58.71387    0  285          -   58.71387      -     -    0s
+     0     0   58.70662    0  295          -   58.70662      -     -    0s
+     0     0   58.70256    0  292          -   58.70256      -     -    0s
+     0     0   58.52309    0  320          -   58.52309      -     -    0s
+     0     0   58.51761    0  304          -   58.51761      -     -    0s
+     0     0   58.31034    0  256          -   58.31034      -     -    0s
+     0     0   58.30656    0  263          -   58.30656      -     -    0s
+     0     0   58.27678    0  300          -   58.27678      -     -    0s
+     0     0   58.22312    0  331          -   58.22312      -     -    0s
+     0     0   58.20679    0  304          -   58.20679      -     -    0s
+     0     0   58.20526    0  339          -   58.20526      -     -    0s
+     0     0   58.15174    0  314          -   58.15174      -     -    0s
+     0     0   58.13832    0  320          -   58.13832      -     -    0s
+     0     0   58.12395    0  321          -   58.12395      -     -    0s
+     0     0   58.12157    0  324          -   58.12157      -     -    0s
+     0     0   58.04682    0  352          -   58.04682      -     -    0s
+     0     0   58.04048    0  352          -   58.04048      -     -    0s
+     0     0   58.02205    0  342          -   58.02205      -     -    0s
+     0     0   58.02205    0  330          -   58.02205      -     -    0s
+     0     2   58.02205    0  327          -   58.02205      -     -    1s
+*  279   221               8      45.0000000   56.97619  26.6%  85.6    2s
+  1372   441   52.82832   20  174   45.00000   56.97619  26.6%  51.6    5s
+  4400  1206   50.70635   15   22   45.00000   53.16667  18.1%  40.5   10s
+  9816  1885   46.33333   28    2   45.00000   50.93619  13.2%  33.8   15s
+ 12036  2079   50.63522   13  180   45.00000   50.63522  12.5%  33.3   20s
+ 12104  2113   50.63522   20  174   45.00000   50.63522  12.5%  34.1   25s
+ 12744  2075   50.63522   26  203   45.00000   50.63522  12.5%  35.8   30s
+ 13703  2079     cutoff   25        45.00000   50.63522  12.5%  37.3   35s
+ 16496  1101   46.00000   36    3   45.00000   50.00000  11.1%  39.8   40s
+
+Cutting planes:
+  Cover: 54
+  Implied bound: 11
+  Clique: 2
+  MIR: 15
+  Flow cover: 100
+  Zero half: 21
+  Network: 56
+  RLT: 32
+  Relax-and-lift: 4
+
+Explored 18132 nodes (736666 simplex iterations) in 42.09 seconds
+Thread count was 32 (of 36 available processors)
+
+Solution count 1: 45 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 4.500000000000e+01, best bound 4.500000000000e+01, gap 0.0000%
+
+User-callback calls 39390, time in user-callback 0.33 sec

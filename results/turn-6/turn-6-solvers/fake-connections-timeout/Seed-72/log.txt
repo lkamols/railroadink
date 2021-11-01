@@ -1,0 +1,77 @@
+
+Gurobi 9.1.2 (linux64) logging started Tue Oct  5 11:29:19 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-6/turn-6-solvers/fake-connections-timeout/Seed-72/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 28 physical cores, 28 logical processors, using up to 28 threads
+Optimize a model with 17158 rows, 14667 columns and 468171 nonzeros
+Model fingerprint: 0x3d1d36f3
+Variable types: 6290 continuous, 8377 integer (8377 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 6e+00]
+Presolve removed 12044 rows and 10334 columns
+Presolve time: 0.23s
+Presolved: 5114 rows, 4333 columns, 36793 nonzeros
+Variable types: 3054 continuous, 1279 integer (1278 binary)
+
+Root relaxation: objective 4.155997e+01, 2720 iterations, 0.25 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   41.55997    0  329          -   41.55997      -     -    0s
+     0     0   41.19985    0  351          -   41.19985      -     -    0s
+     0     0   40.83627    0  367          -   40.83627      -     -    0s
+     0     0   40.78416    0  370          -   40.78416      -     -    0s
+     0     0   40.55110    0  385          -   40.55110      -     -    1s
+     0     0   40.54954    0  380          -   40.54954      -     -    1s
+     0     0   40.51531    0  394          -   40.51531      -     -    1s
+     0     0   40.51336    0  400          -   40.51336      -     -    1s
+     0     0   40.51336    0  400          -   40.51336      -     -    1s
+     0     0   40.47909    0  397          -   40.47909      -     -    1s
+     0     0   40.47508    0  394          -   40.47508      -     -    1s
+     0     0   40.47508    0  394          -   40.47508      -     -    1s
+     0     0   40.43360    0  394          -   40.43360      -     -    1s
+     0     0   40.42802    0  397          -   40.42802      -     -    1s
+     0     0   40.42644    0  370          -   40.42644      -     -    1s
+     0     0   40.42644    0  370          -   40.42644      -     -    1s
+     0     0   40.42644    0  370          -   40.42644      -     -    1s
+     0     0   40.42644    0  370          -   40.42644      -     -    1s
+     0     0   40.42644    0  370          -   40.42644      -     -    1s
+     0     0   40.42644    0  370          -   40.42644      -     -    2s
+     0     0   40.42644    0  370          -   40.42644      -     -    2s
+     0     0   40.42644    0  370          -   40.42644      -     -    2s
+     0     2   40.42644    0  370          -   40.42644      -     -    2s
+    31    60   38.25357    5  336          -   38.34680      -   456    5s
+   316   348   35.04064   10  274          -   36.54690      -   356   10s
+   556   596   34.81095   16  340          -   36.54690      -   310   15s
+   939   994   31.03503   27  220          -   36.54690      -   250   20s
+  1480  1211   35.11173   10  310          -   36.54644      -   199   25s
+  1903  1482   33.08887   17  328          -   36.54644      -   192   30s
+  2399  1684   29.65934   18  245          -   35.79398      -   181   35s
+  3150  1883   32.81834   11  255          -   35.79398      -   168   40s
+  3909  1883 infeasible   16               -   35.08769      -   159   45s
+  4707  1325 infeasible   14               -   34.01185      -   148   51s
+  6880     0   32.50000   20    8          -   32.50000      -   107   55s
+
+Cutting planes:
+  MIR: 4
+  Flow cover: 49
+  Zero half: 23
+  RLT: 1
+  Lazy constraints: 246
+
+Explored 6931 nodes (743094 simplex iterations) in 55.51 seconds
+Thread count was 28 (of 28 available processors)
+
+Solution count 0
+No other solutions better than -1e+100
+
+Model is infeasible
+Best objective -, best bound -, gap -
+
+User-callback calls 16284, time in user-callback 7.38 sec

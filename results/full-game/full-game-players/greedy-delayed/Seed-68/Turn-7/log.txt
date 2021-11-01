@@ -1,0 +1,48 @@
+
+Gurobi 9.1.2 (linux64) logging started Sat Oct  9 14:49:08 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/greedy-delayed/Seed-68/Turn-7/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 36 physical cores, 36 logical processors, using up to 32 threads
+Optimize a model with 16773 rows, 14283 columns and 421881 nonzeros
+Model fingerprint: 0x717aca41
+Variable types: 6290 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 12769 rows and 10917 columns
+Presolve time: 0.22s
+Presolved: 4004 rows, 3366 columns, 19699 nonzeros
+Variable types: 2560 continuous, 806 integer (805 binary)
+
+Root relaxation: objective 4.280645e+01, 1049 iterations, 0.04 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   42.80645    0   33          -   42.80645      -     -    0s
+H    0     0                      39.0000000   42.80645  9.76%     -    0s
+H    0     0                      40.0000000   42.80645  7.02%     -    0s
+     0     0   41.16667    0   34   40.00000   41.16667  2.92%     -    0s
+H    0     0                      41.0000000   41.16667  0.41%     -    0s
+     0     0   41.16667    0   34   41.00000   41.16667  0.41%     -    0s
+
+Cutting planes:
+  MIR: 1
+  Flow cover: 5
+  Zero half: 3
+  RLT: 3
+  Lazy constraints: 2
+
+Explored 1 nodes (1229 simplex iterations) in 0.42 seconds
+Thread count was 32 (of 36 available processors)
+
+Solution count 3: 41 40 39 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 4.100000000000e+01, best bound 4.100000000000e+01, gap 0.0000%
+
+User-callback calls 208, time in user-callback 0.07 sec

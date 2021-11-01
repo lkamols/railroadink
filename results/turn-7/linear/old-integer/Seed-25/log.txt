@@ -1,0 +1,80 @@
+
+Gurobi 9.1.2 (linux64) logging started Sun Oct 31 22:12:38 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-7/linear/old-integer/Seed-25/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 36 physical cores, 36 logical processors, using up to 32 threads
+Optimize a model with 9233 rows, 8861 columns and 342549 nonzeros
+Model fingerprint: 0x97a1de3e
+Variable types: 832 continuous, 8029 integer (8029 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+01]
+  RHS range        [1e+00, 5e+01]
+Presolve removed 7964 rows and 7597 columns
+Presolve time: 0.18s
+Presolved: 1269 rows, 1264 columns, 11019 nonzeros
+Variable types: 387 continuous, 877 integer (876 binary)
+
+Root relaxation: objective 6.439516e+01, 740 iterations, 0.01 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   64.39516    0   70          -   64.39516      -     -    0s
+     0     0   60.43819    0  141          -   60.43819      -     -    0s
+     0     0   60.31206    0  141          -   60.31206      -     -    0s
+     0     0   56.94678    0  159          -   56.94678      -     -    0s
+     0     0   56.84980    0  157          -   56.84980      -     -    0s
+     0     0   56.80059    0  177          -   56.80059      -     -    0s
+     0     0   55.27227    0  191          -   55.27227      -     -    0s
+     0     0   55.16916    0  241          -   55.16916      -     -    0s
+     0     0   55.16284    0  234          -   55.16284      -     -    0s
+     0     0   55.16255    0  232          -   55.16255      -     -    0s
+     0     0   53.98250    0  297          -   53.98250      -     -    0s
+     0     0   53.79707    0  293          -   53.79707      -     -    0s
+     0     0   53.78897    0  307          -   53.78897      -     -    0s
+     0     0   53.78630    0  301          -   53.78630      -     -    0s
+     0     0   53.45022    0  278          -   53.45022      -     -    0s
+     0     0   53.42708    0  281          -   53.42708      -     -    0s
+     0     0   53.41506    0  291          -   53.41506      -     -    0s
+     0     0   53.41222    0  292          -   53.41222      -     -    0s
+     0     0   53.27997    0  278          -   53.27997      -     -    0s
+     0     0   53.23131    0  296          -   53.23131      -     -    0s
+     0     0   53.21524    0  300          -   53.21524      -     -    0s
+     0     0   53.21410    0  297          -   53.21410      -     -    0s
+     0     0   53.17682    0  313          -   53.17682      -     -    0s
+     0     0   53.16885    0  311          -   53.16885      -     -    0s
+     0     0   53.16513    0  312          -   53.16513      -     -    0s
+     0     0   53.16383    0  323          -   53.16383      -     -    0s
+     0     0   53.16383    0  323          -   53.16383      -     -    0s
+H    0     0                      38.0000000   53.16383  39.9%     -    0s
+     0     2   53.16134    0  320   38.00000   53.16134  39.9%     -    0s
+  1544   782   47.17666   22  175   38.00000   50.43052  32.7%  37.8    5s
+  5651  1876   42.76190   15   16   38.00000   47.28716  24.4%  26.1   10s
+  8963  2296   46.75205   11  213   38.00000   46.75205  23.0%  22.8   15s
+  9071  2327   46.75205   19  163   38.00000   46.75205  23.0%  23.8   21s
+ 11107  2126 infeasible   37        38.00000   46.75205  23.0%  25.6   25s
+
+Cutting planes:
+  Cover: 58
+  Implied bound: 10
+  Clique: 2
+  MIR: 14
+  Flow cover: 95
+  Zero half: 32
+  Network: 18
+  RLT: 32
+  Relax-and-lift: 2
+
+Explored 14034 nodes (368893 simplex iterations) in 28.62 seconds
+Thread count was 32 (of 36 available processors)
+
+Solution count 1: 38 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 3.800000000000e+01, best bound 3.800000000000e+01, gap 0.0000%
+
+User-callback calls 31019, time in user-callback 0.13 sec

@@ -1,0 +1,54 @@
+
+Gurobi 9.1.2 (linux64) logging started Sun Oct 10 19:17:41 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/perfect-look-ahead/Seed-4/Turn-7/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 20 physical cores, 20 logical processors, using up to 20 threads
+Optimize a model with 16773 rows, 14283 columns and 421881 nonzeros
+Model fingerprint: 0x67453f81
+Variable types: 6290 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 12451 rows and 10814 columns
+Presolve time: 0.28s
+Presolved: 4322 rows, 3469 columns, 19186 nonzeros
+Variable types: 2753 continuous, 716 integer (715 binary)
+
+Root relaxation: objective 6.262083e+01, 1671 iterations, 0.12 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   62.62083    0  214          -   62.62083      -     -    0s
+     0     0   60.45922    0  230          -   60.45922      -     -    0s
+     0     0   60.45922    0  230          -   60.45922      -     -    0s
+     0     0   60.36532    0  241          -   60.36532      -     -    0s
+     0     0   60.36532    0  241          -   60.36532      -     -    0s
+     0     0   60.36532    0  241          -   60.36532      -     -    0s
+     0     0   60.36532    0  241          -   60.36532      -     -    1s
+     0     0   60.36532    0  241          -   60.36532      -     -    1s
+H    0     0                      51.0000000   60.36532  18.4%     -    1s
+     0     2   60.36532    0  241   51.00000   60.36532  18.4%     -    1s
+*   19    12               4      53.0000000   56.64789  6.88%   251    2s
+*   41     2               7      55.0000000   55.00000  0.00%   139    2s
+
+Cutting planes:
+  Implied bound: 2
+  MIR: 1
+  Flow cover: 15
+  GUB cover: 1
+  Zero half: 8
+
+Explored 44 nodes (8590 simplex iterations) in 2.65 seconds
+Thread count was 20 (of 20 available processors)
+
+Solution count 3: 55 53 51 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 5.500000000000e+01, best bound 5.500000000000e+01, gap 0.0000%
+
+User-callback calls 530, time in user-callback 0.07 sec

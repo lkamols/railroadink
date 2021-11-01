@@ -1,0 +1,53 @@
+
+Gurobi 9.1.2 (linux64) logging started Wed Oct 13 21:38:23 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/internal-sinks/Seed-92/Turn-7/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 36 physical cores, 36 logical processors, using up to 32 threads
+Optimize a model with 16773 rows, 14283 columns and 421881 nonzeros
+Model fingerprint: 0x39c499f7
+Variable types: 6290 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 12587 rows and 10814 columns
+Presolve time: 0.32s
+Presolved: 4186 rows, 3469 columns, 22811 nonzeros
+Variable types: 2637 continuous, 832 integer (831 binary)
+
+Root relaxation: objective 5.276190e+01, 1146 iterations, 0.04 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   52.76190    0  111          -   52.76190      -     -    0s
+H    0     0                      49.0000000   52.76190  7.68%     -    0s
+     0     0   52.42857    0  112   49.00000   52.42857  7.00%     -    0s
+     0     0   52.42857    0  112   49.00000   52.42857  7.00%     -    0s
+     0     0   51.99322    0  110   49.00000   51.99322  6.11%     -    0s
+     0     0   51.36932    0  179   49.00000   51.36932  4.84%     -    0s
+     0     0   51.36932    0   81   49.00000   51.36932  4.84%     -    0s
+H    0     0                      50.0000000   51.36932  2.74%     -    0s
+     0     0     cutoff    0        50.00000   50.00000  0.00%     -    0s
+
+Cutting planes:
+  Clique: 7
+  MIR: 4
+  Flow cover: 13
+  Zero half: 7
+  Network: 1
+  RLT: 9
+  Relax-and-lift: 5
+
+Explored 1 nodes (2660 simplex iterations) in 0.83 seconds
+Thread count was 32 (of 36 available processors)
+
+Solution count 2: 50 49 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 5.000000000000e+01, best bound 5.000000000000e+01, gap 0.0000%
+
+User-callback calls 256, time in user-callback 0.07 sec

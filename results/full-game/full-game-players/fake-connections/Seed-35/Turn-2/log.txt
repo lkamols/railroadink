@@ -1,0 +1,77 @@
+
+Gurobi 9.1.2 (linux64) logging started Sun Oct 10 02:08:16 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/fake-connections/Seed-35/Turn-2/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 20 physical cores, 20 logical processors, using up to 20 threads
+Optimize a model with 17151 rows, 14667 columns and 464981 nonzeros
+Model fingerprint: 0x5b009404
+Variable types: 6290 continuous, 8377 integer (8377 binary)
+Coefficient statistics:
+  Matrix range     [6e-01, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 8e+00]
+Presolve removed 8771 rows and 7939 columns
+Presolve time: 0.30s
+Presolved: 8380 rows, 6728 columns, 34380 nonzeros
+Variable types: 5414 continuous, 1314 integer (1313 binary)
+
+Root relaxation: objective 3.619551e+01, 3894 iterations, 0.60 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   36.19551    0  268          -   36.19551      -     -    1s
+     0     0   35.78068    0  310          -   35.78068      -     -    1s
+     0     0   35.76764    0  314          -   35.76764      -     -    1s
+     0     0   35.76764    0  312          -   35.76764      -     -    1s
+     0     0   35.76764    0  312          -   35.76764      -     -    1s
+     0     0   35.76424    0  330          -   35.76424      -     -    2s
+     0     0   35.76424    0  330          -   35.76424      -     -    2s
+     0     0   35.76396    0  335          -   35.76396      -     -    2s
+     0     0   35.76396    0  335          -   35.76396      -     -    2s
+     0     0   35.76396    0  337          -   35.76396      -     -    2s
+     0     0   35.76396    0  339          -   35.76396      -     -    2s
+     0     0   35.68820    0  361          -   35.68820      -     -    2s
+     0     0   35.68820    0  363          -   35.68820      -     -    2s
+     0     0   35.68494    0  347          -   35.68494      -     -    3s
+     0     0   35.68399    0  374          -   35.68399      -     -    3s
+     0     0   35.62830    0  438          -   35.62830      -     -    3s
+     0     0   35.62721    0  463          -   35.62721      -     -    3s
+     0     0   35.62721    0  462          -   35.62721      -     -    3s
+     0     0   35.62721    0  462          -   35.62721      -     -    4s
+     0     0   35.62721    0  462          -   35.62721      -     -    4s
+     0     0   35.62721    0  461          -   35.62721      -     -    4s
+     0     0   35.62721    0  461          -   35.62721      -     -    4s
+     0     0   35.62721    0  461          -   35.62721      -     -    4s
+     0     0   35.62721    0  461          -   35.62721      -     -    4s
+H    0     0                      24.2000000   35.62721  47.2%     -    5s
+H    0     0                      26.2000000   35.62522  36.0%     -    6s
+     0     2   35.62522    0  461   26.20000   35.62522  36.0%     -    6s
+     7    16   33.53627    3  425   26.20000   34.24506  30.7%  1431   10s
+H   32    52                      30.2000000   33.58978  11.2%  1787   14s
+    51    50   31.68143    6  388   30.20000   33.31077  10.3%  1739   16s
+   111    42   30.90836    7  389   30.20000   32.73127  8.38%  1242   20s
+   206    16   31.30777    7  418   30.20000   32.42527  7.37%   878   26s
+   256     6   31.14756    8  377   30.20000   31.71667  5.02%   796   31s
+
+Cutting planes:
+  MIR: 1
+  Flow cover: 35
+  GUB cover: 1
+  Zero half: 9
+  Mod-K: 1
+  RLT: 6
+  Lazy constraints: 2
+
+Explored 290 nodes (225917 simplex iterations) in 33.23 seconds
+Thread count was 20 (of 20 available processors)
+
+Solution count 3: 30.2 26.2 24.2 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 3.020000000000e+01, best bound 3.020000000000e+01, gap 0.0000%
+
+User-callback calls 5637, time in user-callback 0.14 sec

@@ -1,0 +1,48 @@
+
+Gurobi 9.1.2 (linux64) logging started Fri Aug 13 00:00:29 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-6/fake-connections/Seed-32/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 28 physical cores, 28 logical processors, using up to 28 threads
+Optimize a model with 17150 rows, 14666 columns and 463797 nonzeros
+Model fingerprint: 0x579a5f52
+Variable types: 6289 continuous, 8377 integer (8377 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 2e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 6e+00]
+Presolve removed 12555 rows and 10848 columns
+Presolve time: 0.19s
+Presolved: 4595 rows, 3818 columns, 18301 nonzeros
+Variable types: 3003 continuous, 815 integer (815 binary)
+
+Root relaxation: objective 5.450414e+01, 1383 iterations, 0.05 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   54.50414    0  143          -   54.50414      -     -    0s
+     0     0   54.02124    0  146          -   54.02124      -     -    0s
+     0     0   54.02124    0  148          -   54.02124      -     -    0s
+     0     0   54.02124    0  145          -   54.02124      -     -    0s
+H    0     0                      46.0000000   54.02124  17.4%     -    0s
+     0     2   54.02124    0  145   46.00000   54.02124  17.4%     -    0s
+*   67    66               6      49.0000000   50.79333  3.66%   119    1s
+
+Cutting planes:
+  Flow cover: 9
+  GUB cover: 1
+  Mod-K: 2
+  Lazy constraints: 3
+
+Explored 154 nodes (12903 simplex iterations) in 1.99 seconds
+Thread count was 28 (of 28 available processors)
+
+Solution count 2: 49 46 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 4.900000000000e+01, best bound 4.900000000000e+01, gap 0.0000%
+
+User-callback calls 649, time in user-callback 0.09 sec

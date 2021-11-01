@@ -1,0 +1,94 @@
+
+Gurobi 9.1.2 (linux64) logging started Mon Oct 11 02:20:14 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/perfect-look-ahead/Seed-48/Turn-3/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 28 physical cores, 28 logical processors, using up to 28 threads
+Optimize a model with 20316 rows, 17821 columns and 898101 nonzeros
+Model fingerprint: 0x6826d292
+Variable types: 6290 continuous, 11531 integer (11531 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 1e+01]
+Presolve removed 11465 rows and 10230 columns
+Presolve time: 0.77s
+Presolved: 8851 rows, 7591 columns, 69370 nonzeros
+Variable types: 4766 continuous, 2825 integer (2824 binary)
+
+Root relaxation: objective 8.824405e+01, 6310 iterations, 1.13 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   88.24405    0  488          -   88.24405      -     -    2s
+     0     0   86.81356    0  570          -   86.81356      -     -    2s
+     0     0   86.71114    0  574          -   86.71114      -     -    2s
+     0     0   86.71064    0  574          -   86.71064      -     -    2s
+     0     0   86.71063    0  574          -   86.71063      -     -    2s
+     0     0   85.89830    0  581          -   85.89830      -     -    3s
+     0     0   85.86560    0  572          -   85.86560      -     -    3s
+     0     0   85.86560    0  572          -   85.86560      -     -    3s
+     0     0   85.44947    0  568          -   85.44947      -     -    3s
+     0     0   85.43310    0  581          -   85.43310      -     -    4s
+     0     0   85.43252    0  582          -   85.43252      -     -    4s
+     0     0   85.43252    0  582          -   85.43252      -     -    4s
+     0     0   85.09554    0  602          -   85.09554      -     -    4s
+     0     0   85.09222    0  585          -   85.09222      -     -    4s
+     0     0   85.09050    0  585          -   85.09050      -     -    4s
+     0     0   85.09033    0  586          -   85.09033      -     -    4s
+     0     0   84.86538    0  581          -   84.86538      -     -    4s
+     0     0   84.86244    0  599          -   84.86244      -     -    4s
+     0     0   84.86244    0  599          -   84.86244      -     -    4s
+     0     0   84.79068    0  589          -   84.79068      -     -    5s
+     0     0   84.78816    0  591          -   84.78816      -     -    5s
+     0     0   84.78685    0  602          -   84.78685      -     -    5s
+     0     0   84.78685    0  602          -   84.78685      -     -    5s
+     0     0   84.69515    0  590          -   84.69515      -     -    5s
+     0     0   84.69098    0  607          -   84.69098      -     -    5s
+     0     0   84.69098    0  607          -   84.69098      -     -    5s
+     0     0   84.63604    0  567          -   84.63604      -     -    5s
+     0     0   84.63586    0  585          -   84.63586      -     -    5s
+     0     0   84.46892    0  594          -   84.46892      -     -    6s
+     0     0   84.46835    0  598          -   84.46835      -     -    6s
+     0     0   84.41763    0  562          -   84.41763      -     -    6s
+     0     0   84.41743    0  563          -   84.41743      -     -    6s
+     0     0   84.38497    0  605          -   84.38497      -     -    6s
+     0     0   84.38176    0  604          -   84.38176      -     -    6s
+     0     0   84.38054    0  605          -   84.38054      -     -    6s
+     0     0   84.38049    0  606          -   84.38049      -     -    6s
+     0     0   84.34853    0  605          -   84.34853      -     -    7s
+     0     0   84.34493    0  608          -   84.34493      -     -    7s
+     0     0   84.34493    0  608          -   84.34493      -     -    7s
+     0     0   84.34493    0  610          -   84.34493      -     -    7s
+     0     0   84.34493    0  610          -   84.34493      -     -    7s
+     0     0   84.34493    0  609          -   84.34493      -     -    7s
+     0     0   84.34493    0  609          -   84.34493      -     -    7s
+H    0     0                      80.0000000   84.34493  5.43%     -    8s
+     0     2   84.34493    0  608   80.00000   84.34493  5.43%     -    8s
+     3     8   83.97582    2  525   80.00000   84.21922  5.27%   835   10s
+    59    76   82.69377    6  488   80.00000   83.71540  4.64%   781   15s
+H   87    94                      81.0000000   83.71437  3.35%   757   17s
+   179    84     cutoff    8        81.00000   83.54494  3.14%   539   20s
+*  333    80              10      83.0000000   83.47148  0.57%   428   24s
+
+Cutting planes:
+  Implied bound: 3
+  MIR: 37
+  Flow cover: 95
+  GUB cover: 1
+  Zero half: 101
+  RLT: 1
+  Relax-and-lift: 8
+
+Explored 355 nodes (162402 simplex iterations) in 24.84 seconds
+Thread count was 28 (of 28 available processors)
+
+Solution count 3: 83 81 80 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 8.300000000000e+01, best bound 8.300000000000e+01, gap 0.0000%
+
+User-callback calls 6622, time in user-callback 0.12 sec

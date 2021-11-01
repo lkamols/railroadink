@@ -1,0 +1,52 @@
+
+Gurobi 9.1.2 (linux64) logging started Tue Oct  5 09:44:31 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-6/turn-6-solvers/fake-connections-timeout/Seed-34/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 28 physical cores, 28 logical processors, using up to 28 threads
+Optimize a model with 17151 rows, 14667 columns and 464183 nonzeros
+Model fingerprint: 0xaca277e9
+Variable types: 6290 continuous, 8377 integer (8377 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 6e+00]
+Presolve removed 13407 rows and 11613 columns
+Presolve time: 0.14s
+Presolved: 3744 rows, 3054 columns, 13302 nonzeros
+Variable types: 2267 continuous, 787 integer (786 binary)
+
+Root relaxation: objective 4.198317e+01, 1175 iterations, 0.05 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   41.98317    0  298          -   41.98317      -     -    0s
+     0     0   41.73630    0  277          -   41.73630      -     -    0s
+     0     0   41.59116    0  281          -   41.59116      -     -    0s
+     0     0   41.59116    0  281          -   41.59116      -     -    0s
+     0     0   41.50000    0    7          -   41.50000      -     -    0s
+     0     0   41.50000    0    7          -   41.50000      -     -    0s
+     0     2   41.50000    0    7          -   41.50000      -     -    0s
+   721   463 infeasible   15               -   41.24416      -   123    5s
+
+Cutting planes:
+  Clique: 11
+  MIR: 1
+  Flow cover: 35
+  Zero half: 5
+  RLT: 3
+  Lazy constraints: 62
+
+Explored 2044 nodes (146111 simplex iterations) in 8.70 seconds
+Thread count was 28 (of 28 available processors)
+
+Solution count 0
+No other solutions better than -1e+100
+
+Model is infeasible
+Best objective -, best bound -, gap -
+
+User-callback calls 4584, time in user-callback 2.33 sec

@@ -1,0 +1,77 @@
+
+Gurobi 9.1.2 (linux64) logging started Mon Oct  4 20:07:25 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/greedy-delayed/Seed-92/Turn-5/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 28 physical cores, 28 logical processors, using up to 28 threads
+Optimize a model with 16773 rows, 14283 columns and 422301 nonzeros
+Model fingerprint: 0x0104c4dc
+Variable types: 6290 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 10162 rows and 8883 columns
+Presolve time: 0.25s
+Presolved: 6611 rows, 5400 columns, 44194 nonzeros
+Variable types: 4043 continuous, 1357 integer (1356 binary)
+
+Root relaxation: objective 3.396220e+01, 2912 iterations, 0.32 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   33.96220    0  338          -   33.96220      -     -    0s
+     0     0   33.79655    0  473          -   33.79655      -     -    0s
+     0     0   33.77828    0  474          -   33.77828      -     -    0s
+     0     0   33.53031    0  529          -   33.53031      -     -    1s
+     0     0   33.49361    0  525          -   33.49361      -     -    1s
+     0     0   33.35240    0  500          -   33.35240      -     -    1s
+     0     0   33.34565    0  523          -   33.34565      -     -    1s
+     0     0   33.34545    0  519          -   33.34545      -     -    1s
+     0     0   33.34492    0  519          -   33.34492      -     -    1s
+     0     0   33.34492    0  520          -   33.34492      -     -    1s
+     0     0   33.27597    0  529          -   33.27597      -     -    1s
+     0     0   33.25652    0  555          -   33.25652      -     -    1s
+     0     0   33.25538    0  529          -   33.25538      -     -    1s
+     0     0   33.25503    0  553          -   33.25503      -     -    1s
+     0     0   33.25497    0  553          -   33.25497      -     -    2s
+     0     0   33.22700    0  537          -   33.22700      -     -    2s
+     0     0   33.22373    0  585          -   33.22373      -     -    2s
+     0     0   33.22314    0  584          -   33.22314      -     -    2s
+     0     0   33.22314    0  584          -   33.22314      -     -    2s
+     0     0   33.19788    0  539          -   33.19788      -     -    2s
+     0     0   33.19314    0  560          -   33.19314      -     -    2s
+     0     0   33.19223    0  557          -   33.19223      -     -    2s
+     0     0   33.19218    0  569          -   33.19218      -     -    2s
+     0     0   33.15032    0  540          -   33.15032      -     -    2s
+     0     0   33.14933    0  545          -   33.14933      -     -    2s
+     0     0   33.14847    0  549          -   33.14847      -     -    2s
+     0     0   33.14764    0  548          -   33.14764      -     -    2s
+     0     0   33.14745    0  554          -   33.14745      -     -    2s
+     0     0   33.12680    0  561          -   33.12680      -     -    3s
+     0     0   33.12666    0  558          -   33.12666      -     -    3s
+     0     0   33.12666    0  558          -   33.12666      -     -    3s
+     0     0   33.12666    0  558          -   33.12666      -     -    3s
+     0     0   33.12666    0  558          -   33.12666      -     -    3s
+     0     2   33.12666    0  558          -   33.12666      -     -    4s
+     1     4   32.32820    1  497          -   33.12546      -  1669    5s
+*   25    24               4      27.0000000   31.96694  18.4%   701    8s
+    61    10   31.24171    7  478   27.00000   31.44105  16.4%   464   10s
+
+Cutting planes:
+  Flow cover: 34
+  Zero half: 34
+  Lazy constraints: 4
+
+Explored 205 nodes (61403 simplex iterations) in 14.84 seconds
+Thread count was 28 (of 28 available processors)
+
+Solution count 1: 27 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 2.700000000000e+01, best bound 2.700000000000e+01, gap 0.0000%
+
+User-callback calls 3022, time in user-callback 0.13 sec

@@ -1,0 +1,43 @@
+
+Gurobi 9.1.2 (linux64) logging started Tue Oct 12 15:49:47 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/perfect-look-ahead/Seed-87/Turn-7/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 16 physical cores, 16 logical processors, using up to 16 threads
+Optimize a model with 16773 rows, 14283 columns and 421881 nonzeros
+Model fingerprint: 0xe3c9c736
+Variable types: 6290 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 12738 rows and 10915 columns
+Presolve time: 0.19s
+Presolved: 4035 rows, 3368 columns, 22959 nonzeros
+Variable types: 2572 continuous, 796 integer (795 binary)
+
+Root relaxation: objective 5.850000e+01, 1240 iterations, 0.16 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   58.50000    0   19          -   58.50000      -     -    0s
+H    0     0                      50.0000000   58.50000  17.0%     -    0s
+H    0     0                      54.0000000   58.50000  8.33%     -    1s
+     0     0   58.50000    0  185   54.00000   58.50000  8.33%     -    2s
+     0     0   58.00000    0   10   54.00000   58.00000  7.41%     -    2s
+     0     0   58.00000    0   10   54.00000   58.00000  7.41%     -    2s
+H    0     0                      56.0000000   58.00000  3.57%     -    2s
+*    0     0               0      57.0000000   57.00000  0.00%     -    2s
+
+Explored 1 nodes (1668 simplex iterations) in 2.41 seconds
+Thread count was 16 (of 16 available processors)
+
+Solution count 4: 57 56 54 50 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 5.700000000000e+01, best bound 5.700000000000e+01, gap 0.0000%
+
+User-callback calls 522, time in user-callback 1.69 sec

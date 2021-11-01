@@ -1,0 +1,79 @@
+
+Gurobi 9.1.2 (linux64) logging started Sun Oct 31 22:09:53 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-7/linear/old-integer/Seed-20/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 36 physical cores, 36 logical processors, using up to 32 threads
+Optimize a model with 9233 rows, 8861 columns and 342549 nonzeros
+Model fingerprint: 0xfb88487d
+Variable types: 832 continuous, 8029 integer (8029 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+01]
+  RHS range        [1e+00, 5e+01]
+Presolve removed 8012 rows and 7655 columns
+Presolve time: 0.18s
+Presolved: 1221 rows, 1206 columns, 8301 nonzeros
+Variable types: 403 continuous, 803 integer (802 binary)
+
+Root relaxation: objective 7.195402e+01, 781 iterations, 0.01 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   71.95402    0  103          -   71.95402      -     -    0s
+     0     0   64.18548    0   99          -   64.18548      -     -    0s
+     0     0   64.08468    0  123          -   64.08468      -     -    0s
+     0     0   59.11421    0  221          -   59.11421      -     -    0s
+     0     0   59.04428    0  215          -   59.04428      -     -    0s
+     0     0   59.04045    0  251          -   59.04045      -     -    0s
+     0     0   58.02960    0  257          -   58.02960      -     -    0s
+     0     0   57.84985    0  272          -   57.84985      -     -    0s
+     0     0   57.80207    0  282          -   57.80207      -     -    0s
+     0     0   57.78218    0  277          -   57.78218      -     -    0s
+     0     0   57.77261    0  292          -   57.77261      -     -    0s
+     0     0   57.76647    0  292          -   57.76647      -     -    0s
+     0     0   57.06826    0  282          -   57.06826      -     -    0s
+     0     0   56.97105    0  292          -   56.97105      -     -    0s
+     0     0   56.96130    0  285          -   56.96130      -     -    0s
+     0     0   56.95851    0  293          -   56.95851      -     -    0s
+     0     0   56.87083    0  301          -   56.87083      -     -    0s
+     0     0   56.86661    0  300          -   56.86661      -     -    0s
+     0     0   56.81742    0  291          -   56.81742      -     -    0s
+     0     0   56.81742    0  280          -   56.81742      -     -    0s
+     0     2   56.80019    0  279          -   56.80019      -     -    0s
+*  522   374              13      37.0000000   54.71060  47.9%  58.0    2s
+*  798   496              20      40.0000000   54.71060  36.8%  49.8    3s
+H  801   504                      41.0000000   54.71060  33.4%  49.7    4s
+   994   608   52.13218   19   43   41.00000   54.71060  33.4%  50.6    5s
+* 1110   685              21      42.0000000   54.71060  30.3%  50.6    5s
+  5857  2332   48.10618   21  280   42.00000   51.14641  21.8%  34.6   10s
+  5879  2347   51.14641   12  262   42.00000   51.14641  21.8%  35.3   15s
+  6560  2465   45.26667   26    7   42.00000   51.14641  21.8%  38.4   20s
+  9437  2517   47.90057   33  140   42.00000   51.14641  21.8%  39.2   25s
+ 11996  2236 infeasible   25        42.00000   50.25920  19.7%  40.2   30s
+ 16087  2358   44.00000   30    9   42.00000   48.65897  15.9%  39.6   35s
+ 21536  1857 infeasible   33        42.00000   46.89706  11.7%  37.7   40s
+
+Cutting planes:
+  Cover: 53
+  Implied bound: 11
+  Clique: 2
+  MIR: 22
+  Flow cover: 94
+  Zero half: 43
+  Network: 33
+  RLT: 30
+  Lazy constraints: 1
+
+Explored 28991 nodes (991055 simplex iterations) in 44.80 seconds
+Thread count was 32 (of 36 available processors)
+
+Solution count 4: 42 41 40 37 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 4.200000000000e+01, best bound 4.200000000000e+01, gap 0.0000%
+
+User-callback calls 60018, time in user-callback 0.87 sec

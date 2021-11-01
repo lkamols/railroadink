@@ -1,0 +1,87 @@
+
+Gurobi 9.1.2 (linux64) logging started Mon Aug 30 22:43:08 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-6/linear-next-multi/Seed-43/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 36 physical cores, 36 logical processors, using up to 32 threads
+Optimize a model with 112897 rows, 93029 columns and 5123129 nonzeros
+Model fingerprint: 0x82b005ab
+Variable types: 89491 continuous, 3538 integer (3538 binary)
+Coefficient statistics:
+  Matrix range     [1e-01, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 2e+00]
+Presolve removed 74467 rows and 62036 columns
+Presolve time: 2.50s
+Presolved: 38430 rows, 30993 columns, 184658 nonzeros
+Variable types: 30756 continuous, 237 integer (234 binary)
+
+Deterministic concurrent LP optimizer: primal and dual simplex
+Showing first log only...
+
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+   12233    4.6030421e+01   0.000000e+00   1.542375e+05      5s
+   16943    5.0284158e+01   0.000000e+00   7.496566e+04     10s
+   21463    5.3043136e+01   0.000000e+00   1.121161e+04     15s
+   25913    5.3689587e+01   0.000000e+00   4.346857e+03     20s
+   29967    5.3722266e+01   0.000000e+00   0.000000e+00     24s
+Concurrent spin time: 3.81s
+
+Solved with primal simplex
+
+Root relaxation: objective 5.372227e+01, 29967 iterations, 24.99 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   53.72227    0   23          -   53.72227      -     -   27s
+     0     0   53.42738    0   39          -   53.42738      -     -   31s
+     0     0   53.41632    0   40          -   53.41632      -     -   31s
+     0     0   53.41614    0   40          -   53.41614      -     -   31s
+     0     0   53.41527    0   43          -   53.41527      -     -   32s
+     0     0   53.41527    0   43          -   53.41527      -     -   32s
+     0     2   53.41527    0   43          -   53.41527      -     -   38s
+     1     4   53.17154    1   49          -   53.41378      -  1711   42s
+     3     8   52.98157    2   40          -   53.17119      -  3381   48s
+     7    16   52.79707    3   48          -   52.98140      -  3325   56s
+    15    28   52.07962    4   46          -   52.79704      -  3675   61s
+    31    52   51.59186    5   37          -   52.35184      -  4187   86s
+    61    70   51.46360    6   33          -   51.88982      -  5302   92s
+    93    76   51.39948    7   35          -   51.88411      -  4032   97s
+   125    69   51.33761    8   39          -   51.88411      -  3307  101s
+   157    67   51.23945    9   40          -   51.88411      -  2734  108s
+   189    62   51.11637   10   37          -   51.88411      -  2457  113s
+   226    57   50.96769   11   35          -   51.88411      -  2276  120s
+   301    36   50.70505   13   35          -   51.88411      -  1936  127s
+   332    32   50.54233   14   34          -   51.88411      -  1837  131s
+   387    29   50.23110   16   32          -   51.88411      -  1703  137s
+   413    20   50.12961   17   29          -   51.88411      -  1642  140s
+   454    17   49.97811   19   36          -   51.88411      -  1560  145s
+   486    12   49.87049   21   32          -   51.88411      -  1515  150s
+   508    13   49.07241   23   31          -   51.88411      -  1485  155s
+   530     6   48.88913   25   29          -   51.88411      -  1459  160s
+   546     3 infeasible   28               -   49.15320      -  1446  166s
+   565     0 infeasible   41               -   48.50427      -  1427  170s
+
+Cutting planes:
+  Implied bound: 2
+  Zero half: 1
+  RLT: 37
+  Relax-and-lift: 1
+  Lazy constraints: 17
+
+Explored 570 nodes (840428 simplex iterations) in 170.70 seconds
+Thread count was 32 (of 36 available processors)
+
+Solution count 0
+No other solutions better than -1e+100
+
+Model is infeasible
+Best objective -, best bound -, gap -
+
+User-callback calls 64986, time in user-callback 0.76 sec

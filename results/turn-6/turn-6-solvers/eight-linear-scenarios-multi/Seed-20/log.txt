@@ -1,0 +1,109 @@
+
+Gurobi 9.1.2 (linux64) logging started Mon Aug 30 21:52:15 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-6/linear-next-multi/Seed-20/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 36 physical cores, 36 logical processors, using up to 32 threads
+Optimize a model with 112961 rows, 93029 columns and 5170733 nonzeros
+Model fingerprint: 0x32f7427a
+Variable types: 89491 continuous, 3538 integer (3538 binary)
+Coefficient statistics:
+  Matrix range     [1e-01, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 72447 rows and 59691 columns
+Presolve time: 3.66s
+Presolved: 40514 rows, 33338 columns, 327832 nonzeros
+Variable types: 32873 continuous, 465 integer (465 binary)
+
+Deterministic concurrent LP optimizer: primal and dual simplex
+Showing first log only...
+
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+   10235    3.7193440e+01   0.000000e+00   2.550633e+04      5s
+   21203    5.3920516e+01   0.000000e+00   1.895518e+04     10s
+   24953    5.6591960e+01   0.000000e+00   1.734986e+05     15s
+   28463    5.7639929e+01   0.000000e+00   1.021275e+05     20s
+   32003    5.8478702e+01   0.000000e+00   4.830644e+03     25s
+   35273    5.8858047e+01   0.000000e+00   8.516854e+04     30s
+   38683    5.9154495e+01   0.000000e+00   2.412679e+04     35s
+   42143    5.9347541e+01   0.000000e+00   1.017329e+04     40s
+   45493    5.9460843e+01   0.000000e+00   1.103845e+04     45s
+   49553    5.9520448e+01   0.000000e+00   6.012825e+01     50s
+   51890    5.9440467e+01   0.000000e+00   0.000000e+00     53s
+Concurrent spin time: 4.52s
+
+Solved with primal simplex
+
+Root relaxation: objective 5.944047e+01, 51890 iterations, 53.57 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   59.44047    0   26          -   59.44047      -     -   57s
+     0     0   59.44047    0   26          -   59.44047      -     -   63s
+     0     2   59.44047    0   26          -   59.44047      -     -   72s
+     1     4   58.90362    1   29          -   59.44034      -  4737   78s
+     3     8   58.75873    2   34          -   58.90334      -  4526   89s
+     7    16   58.70091    3   44          -   58.76124      -  5104  110s
+    15    32   58.62527    4   46          -   58.74220      -  5501  120s
+    31    58   58.25452    5   64          -   58.72158      -  8049  198s
+    63    89   58.22852    6   63          -   58.72038      -  7695  224s
+    95   121   58.17742    7   60          -   58.71974      -  6300  237s
+   127   153   58.10569    8   55          -   58.71795      -  5168  244s
+   159   183   58.05719    9   57          -   58.71795      -  4407  251s
+   191   221   58.04623   10   62          -   58.71795      -  3860  258s
+   232   266   58.01883   11   56          -   58.71795      -  3378  267s
+   279   313   58.00450   12   53          -   58.71795      -  3005  276s
+   330   373   57.98308   13   51          -   58.71795      -  2688  282s
+   394   417   57.95311   14   54          -   58.71795      -  2377  289s
+   462   469   57.93547   15   58          -   58.71795      -  2117  304s
+   527   475   57.91295   16   55          -   58.71795      -  1978  346s
+   608   517   57.89194   17   51          -   58.71795      -  2017  359s
+   667   566   57.85853   18   57          -   58.71795      -  1928  374s
+   728   614   57.75933   19   62          -   58.71795      -  1880  388s
+   805   674   57.69614   20   63          -   58.71795      -  1809  406s
+   899   693   57.63743   21   57          -   58.71795      -  1712  431s
+  1007   744   57.55962   22   57          -   58.71795      -  1664  450s
+  1092   774   57.30659   23   58          -   58.71795      -  1623  494s
+  1209   742   57.30659   24   58          -   58.71795      -  1596  525s
+  1322   747   57.08769   26   59          -   58.71795      -  1569  547s
+  1401   788   57.00589   27   57          -   58.71795      -  1557  560s
+  1481   803   56.98551   28   59          -   58.71795      -  1532  585s
+  1578   766   56.90616   31   59          -   58.71795      -  1505  617s
+  1687   745   56.87445   33   57          -   58.71795      -  1481  635s
+  1803   625   56.83662   35   57          -   58.71795      -  1442  664s
+  1992   484 infeasible   36               -   58.71795      -  1365  678s
+  2203   263 infeasible   35               -   58.71795      -  1270  693s
+  2500   109   55.17449   16   15          -   58.71795      -  1152  718s
+  2710    39   54.76344   17   13          -   58.71795      -  1081  732s
+  2812    18 infeasible   18               -   57.08407      -  1058  747s
+  2849    20 infeasible   20               -   56.40953      -  1061  774s
+  2867    13   54.63530   28   34          -   56.28319      -  1069  783s
+  2892    11 infeasible   24               -   55.77286      -  1070  789s
+  2910     5   55.44236   59   55          -   55.63590      -  1069  794s
+  2926     9   55.39640   60   59          -   55.44228      -  1067  798s
+  2936     8 infeasible   61               -   55.38247      -  1065  803s
+  2949    10 infeasible   66               -   55.30555      -  1065  807s
+  2963     9 infeasible   69               -   55.24969      -  1062  811s
+  2980     4 infeasible   73               -   55.07496      -  1059  815s
+  2997     0 infeasible   81               -   54.60253      -  1056  820s
+
+Cutting planes:
+  Lazy constraints: 59
+
+Explored 2999 nodes (3217528 simplex iterations) in 820.07 seconds
+Thread count was 32 (of 36 available processors)
+
+Solution count 0
+No other solutions better than -1e+100
+
+Model is infeasible
+Best objective -, best bound -, gap -
+
+User-callback calls 365417, time in user-callback 4.88 sec

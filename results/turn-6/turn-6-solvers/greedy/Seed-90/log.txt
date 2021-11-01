@@ -1,0 +1,76 @@
+
+Gurobi 9.1.2 (linux64) logging started Thu Aug 12 22:29:44 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/turn-6/greedy/Seed-90/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 28 physical cores, 28 logical processors, using up to 28 threads
+Optimize a model with 16772 rows, 14282 columns and 422131 nonzeros
+Model fingerprint: 0xe40f0b49
+Variable types: 6289 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 3e+00]
+Presolve removed 11523 rows and 9901 columns
+Presolve time: 0.15s
+Presolved: 5249 rows, 4381 columns, 33781 nonzeros
+Variable types: 3254 continuous, 1127 integer (1127 binary)
+
+Root relaxation: objective 4.326321e+01, 2154 iterations, 0.16 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   43.26321    0  324          -   43.26321      -     -    0s
+     0     0   42.59747    0  304          -   42.59747      -     -    0s
+     0     0   42.59747    0  304          -   42.59747      -     -    0s
+     0     0   42.49172    0  322          -   42.49172      -     -    0s
+     0     0   42.49172    0  323          -   42.49172      -     -    0s
+     0     0   42.43664    0  330          -   42.43664      -     -    0s
+     0     0   42.43430    0  327          -   42.43430      -     -    0s
+     0     0   42.43430    0  327          -   42.43430      -     -    0s
+     0     0   42.37475    0  319          -   42.37475      -     -    0s
+     0     0   42.37386    0  333          -   42.37386      -     -    0s
+     0     0   42.37331    0  335          -   42.37331      -     -    0s
+     0     0   42.37331    0  335          -   42.37331      -     -    0s
+     0     0   42.34886    0  339          -   42.34886      -     -    0s
+     0     0   42.34557    0  342          -   42.34557      -     -    0s
+     0     0   42.34557    0  342          -   42.34557      -     -    0s
+     0     0   42.31114    0  336          -   42.31114      -     -    0s
+     0     0   42.30947    0  335          -   42.30947      -     -    0s
+     0     0   42.30925    0  339          -   42.30925      -     -    1s
+     0     0   42.30269    0  345          -   42.30269      -     -    1s
+     0     0   42.30028    0  354          -   42.30028      -     -    1s
+     0     0   42.29980    0  352          -   42.29980      -     -    1s
+     0     0   42.29980    0  351          -   42.29980      -     -    1s
+     0     0   42.29979    0  352          -   42.29979      -     -    1s
+     0     0   42.29979    0  352          -   42.29979      -     -    1s
+     0     0   42.29979    0  352          -   42.29979      -     -    1s
+     0     0   42.29979    0  352          -   42.29979      -     -    1s
+     0     0   42.29979    0  352          -   42.29979      -     -    1s
+     0     2   42.29979    0  352          -   42.29979      -     -    2s
+*   50    41               5      27.0000000   40.73567  50.9%   292    4s
+*   53    41               5      32.0000000   40.73567  27.3%   281    4s
+    55    44   40.52683    6  278   32.00000   40.72650  27.3%   275    5s
+H   58    44                      33.0000000   40.72650  23.4%   267    5s
+H  114    46                      34.0000000   40.08613  17.9%   218    6s
+*  163    47               7      35.0000000   39.85925  13.9%   196    7s
+
+Cutting planes:
+  Clique: 1
+  Flow cover: 50
+  Zero half: 32
+  RLT: 2
+  Lazy constraints: 15
+
+Explored 593 nodes (77827 simplex iterations) in 9.89 seconds
+Thread count was 28 (of 28 available processors)
+
+Solution count 5: 35 34 33 ... 27
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 3.500000000000e+01, best bound 3.500000000000e+01, gap 0.0000%
+
+User-callback calls 2244, time in user-callback 0.75 sec

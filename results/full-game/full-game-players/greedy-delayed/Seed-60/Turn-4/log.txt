@@ -1,0 +1,64 @@
+
+Gurobi 9.1.2 (linux64) logging started Sat Oct  9 10:47:31 2021
+
+Changed value of parameter LogFile to /data/uqlkamol/railroad-ink-results/full-game/full-game-players/greedy-delayed/Seed-60/Turn-4/log.txt
+   Prev:   Default: 
+Gurobi Optimizer version 9.1.2 build v9.1.2rc0 (linux64)
+Thread count: 36 physical cores, 36 logical processors, using up to 32 threads
+Optimize a model with 16766 rows, 14283 columns and 418565 nonzeros
+Model fingerprint: 0xbee34532
+Variable types: 6290 continuous, 7993 integer (7993 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 2e+00]
+Presolve removed 11324 rows and 10162 columns
+Presolve time: 0.19s
+Presolved: 5442 rows, 4121 columns, 18408 nonzeros
+Variable types: 3202 continuous, 919 integer (918 binary)
+
+Root relaxation: objective 2.814516e+01, 1688 iterations, 0.08 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0   28.14516    0  140          -   28.14516      -     -    0s
+     0     0   27.83395    0  117          -   27.83395      -     -    0s
+     0     0   27.54017    0  362          -   27.54017      -     -    0s
+     0     0   27.45077    0  358          -   27.45077      -     -    0s
+     0     0   27.45068    0  359          -   27.45068      -     -    0s
+     0     0   27.42287    0  391          -   27.42287      -     -    0s
+     0     0   27.42287    0  391          -   27.42287      -     -    0s
+     0     0   27.42287    0  391          -   27.42287      -     -    0s
+     0     0   27.42287    0  389          -   27.42287      -     -    0s
+     0     0   27.38806    0  398          -   27.38806      -     -    0s
+     0     0   27.38717    0  398          -   27.38717      -     -    0s
+     0     0   27.38717    0  398          -   27.38717      -     -    0s
+     0     0   27.34685    0  369          -   27.34685      -     -    0s
+     0     0   27.34685    0  369          -   27.34685      -     -    0s
+     0     0   27.34685    0  369          -   27.34685      -     -    0s
+     0     0   27.34685    0  369          -   27.34685      -     -    1s
+     0     0   27.34685    0  369          -   27.34685      -     -    1s
+     0     2   27.34685    0  369          -   27.34685      -     -    1s
+*    5     6               2      23.0000000   27.02774  17.5%   206    1s
+*   22     4               6      24.0000000   26.56534  10.7%   117    2s
+
+Cutting planes:
+  Implied bound: 2
+  Clique: 4
+  Flow cover: 30
+  GUB cover: 1
+  Zero half: 1
+  Mod-K: 5
+  Lazy constraints: 9
+
+Explored 46 nodes (6061 simplex iterations) in 2.38 seconds
+Thread count was 32 (of 36 available processors)
+
+Solution count 2: 24 23 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 2.400000000000e+01, best bound 2.400000000000e+01, gap 0.0000%
+
+User-callback calls 681, time in user-callback 0.16 sec
