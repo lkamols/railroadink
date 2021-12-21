@@ -97,6 +97,7 @@ class RailroadInkSolver:
     internal_sinks - if True, then adds framework for connecting exits internally to ensure they are not closed off
     internal_sink_scores - determines how many points are scored for internal super sink connections each turn
     old_constraints - if True, uses older versions of constraints that are not as tight
+    single_path_flow_problem - if True, uses the old single flow version of the flow problem
     binary_set - set of variables to make binary
     gurobi_params - dictionary of gurobi parameters to set
     timeouts - array of timeouts for each turn measured in seconds, -1 at each index if there shouldn't be a timeout
@@ -112,7 +113,7 @@ class RailroadInkSolver:
                  open_ends=False, open_end_points=DEFAULT_OPEN_ENDS_POINTS,
                  fake_connections=False, fake_connections_cost=DEFAULT_FAKE_CONNECTIONS_POINTS, fake_connections_max=DEFAULT_FAKE_CONNECTIONS_MAX,
                  internal_sinks=False, internal_sink_scores=DEFAULT_INTERNAL_SINK_SCORES,
-                 old_constraints=False,
+                 old_constraints=False, single_path_flow_problem=False,
                  binary_set=DEFAULT_BINARY_SET,
                  gurobi_params=DEFAULT_GUROBI_PARAMS,
                  branch_priorities=DEFAULT_PRIORITIES,
@@ -140,6 +141,7 @@ class RailroadInkSolver:
         self._internal_sinks = internal_sinks
         self._internal_sink_scores = internal_sink_scores
         self._old_constraints = old_constraints
+        self._single_path_flow_problem = single_path_flow_problem
         self._binary_set = binary_set
         self._gurobi_params = gurobi_params
         self._branch_priorities = branch_priorities
@@ -407,7 +409,7 @@ class RailroadInkSolver:
         #CONNECTING EXITS VARIABLES
         #these are different if using the old constraints
         if self._connecting_exits:
-            if not self._old_constraints:
+            if not self._old_constraints and not self._single_path_flow_problem:
                 #each of these is defined for every single possible set of dice rolls d in D
                 #the flow problem is also defined for every start square 'o'
                 #these are all linear variables since we start with only 1 as an input
@@ -752,7 +754,7 @@ class RailroadInkSolver:
         
         #these are all done for only the complete dice rolls, so for d in D
         #the internal constraints also exist for every possible origin square o in O
-        if not self._old_constraints:
+        if not self._old_constraints and not self._single_path_flow_problem:
             #the flow into an internal square must be the same as the flow out
             if not self._internal_sinks:
                 self.internal_flows = {(s,o,e,d) :
@@ -934,7 +936,7 @@ class RailroadInkSolver:
             M = self.M
         
         #calculate the score for each full scenario, use a <= because the optimisation will force equality where important
-        if not self._old_constraints:
+        if not self._old_constraints and not self._single_path_flow_problem:
             self.scoring = {d :
                 m.addConstr(Alpha[d] == quicksum(X[t,s,c] for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d)) #centre square points
                                       + (4 * quicksum(G[s,o,d] for s in O for o in O if s != o) + J[d] if self._connecting_exits else 0) #connecting exits points
@@ -1109,7 +1111,7 @@ class RailroadInkSolver:
                 #do the calculations
                 score = round(Alpha[d].x)
                 centre_points = round(sum(X[t,s,c].x for s in I if Board.is_centre_square(s) for t in T for c in prefixes(d))) 
-                if self._old_constraints:
+                if self._old_constraints or self._single_path_flow_problem:
                     H = self.H
                     connecting_points = round(48 - 4 * sum(H[s,d].x for s in O) + J[d].x)
                 else:
@@ -1183,6 +1185,7 @@ class RailroadInkSolver:
             csv_writer.writerow(["fake_connections_max"] + self._fake_connections_max)
             csv_writer.writerow(["internal_sink_scores"] + self._internal_sink_scores)
             csv_writer.writerow(["old_constraints", self._old_constraints])
+            csv_writer.writerow(["single_path_flow_problem", self._single_path_flow_problem])
             csv_writer.writerow(["linear", self._linear])
             csv_writer.writerow(["linear_tree", self._linear_tree])
             csv_writer.writerow(["solution_count", self._solution_count])
@@ -1547,26 +1550,26 @@ if __name__ == "__main__":
     #CODE USED FOR THESIS DEMONSTRATION
     #performs a solve for the game in the rulebook
     
-    board = rulebook_game()
-    dice_rolls = rulebook_dice_rolls()
-    
-    #print the starting board
-    board.fancy_board_print()
-    
-    #run the model for turn 7
-    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
-    s.solve(print_output=True)
-    
-    #add the moves chosen to the board
-    for tile, square in s.get_moves_made()[(0,)]:
-        board.add_tile(tile, square, 7)
-    
-    #print the result
-    board.fancy_board_print()
+#    board = rulebook_game()
+#    dice_rolls = rulebook_dice_rolls()
+#    
+#    #print the starting board
+#    board.fancy_board_print()
+#    
+#    #run the model for turn 7
+#    s = RailroadInkSolver(board, 7, dice_rolls, "expected-score")
+#    s.solve(print_output=True)
+#    
+#    #add the moves chosen to the board
+#    for tile, square in s.get_moves_made()[(0,)]:
+#        board.add_tile(tile, square, 7)
+#    
+#    #print the result
+#    board.fancy_board_print()
     
     #PERFECT GAME CALCULATION
-#    board = Board()
-#    dice_rolls = [[DiceRoll({Piece.BASIC : 21, Piece.JUNCTION : 7},1,3)]]
-#    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", )
-#    s.solve(print_output=True, printD="all")
+    board = Board()
+    dice_rolls = [[DiceRoll({Piece.BASIC : 21, Piece.JUNCTION : 7},1,3)]]
+    s = RailroadInkSolver(board, 1, dice_rolls, "expected-score", single_path_flow_problem=True)
+    s.solve(print_output=True, printD="all", lazy_constraints=False)
     
